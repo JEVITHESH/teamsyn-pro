@@ -1,0 +1,8 @@
+{
+  "name": "TeamSync Pro",
+  "description": "A comprehensive team collaboration platform featuring role-based access, group/private chat with AI bot integration, polls, schedules, and administrative controls.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

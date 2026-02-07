@@ -1,0 +1,10 @@
+﻿{
+  "projectId": "teamsync-pro-2026",
+  "appId": "1:334840280470:web:3ad8a1aaf980463878d9b7",
+  "storageBucket": "teamsync-pro-2026.firebasestorage.app",
+  "apiKey": "AIzaSyBtMb7N6aDC2iLN-gbXFeeRi6I2XmkT1tQ",
+  "authDomain": "teamsync-pro-2026.firebaseapp.com",
+  "messagingSenderId": "334840280470",
+  "projectNumber": "334840280470",
+  "version": "2"
+}

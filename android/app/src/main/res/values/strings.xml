@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TeamSync Pro</string>
+    <string name="title_activity_main">TeamSync Pro</string>
+    <string name="package_name">com.iyradlab.teamsyncpro</string>
+    <string name="custom_url_scheme">com.iyradlab.teamsyncpro</string>
+</resources>

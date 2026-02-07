@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Inter', 'sans-serif';
+}
+
+@layer base {
+    body {
+        font-family: var(--font-sans);
+    }
+
+    .dark body {
+        background-color: #09090b;
+        color: #fafafa;
+        color-scheme: dark;
+    }
+}
+
+@layer utilities {
+
+    /* Absolute Scrollbar Removal but maintain functionality */
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+}
+
+/* Global scrollbar hiding as per original CSS */
+::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+    display: none;
+}
+
+* {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

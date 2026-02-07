@@ -1,0 +1,25 @@
+# Technology Stack
+
+This project is built using the following technologies:
+
+## Core Framework & Build Tool
+- **React**: ^19.2.3 (UI Library)
+- **Vite**: ^6.2.0 (Build tool and development server)
+- **TypeScript**: ~5.8.2 (Programming language)
+
+## Styling & UI
+- **Tailwind CSS**: ^4.1.18 (Utility-first CSS framework)
+- **PostCSS**: ^8.5.6 (CSS transformer)
+- **Lucide React**: ^0.562.0 (Icon library)
+- **Recharts**: ^3.6.0 (Charting library for React)
+
+## Routing
+- **React Router DOM**: ^7.12.0 (Client-side routing)
+
+## Backend & Services
+- **Firebase**: ^12.7.0 (Backend-as-a-Service: Auth, Firestore, etc.)
+- **Google GenAI**: ^1.35.0 (AI integration)
+
+## Development Tools
+- **Autoprefixer**: ^10.4.23
+- **@vitejs/plugin-react**: ^5.0.0

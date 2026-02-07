@@ -1,0 +1,72 @@
+
+> Configure project :app
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :capacitor-cordova-android-plugins
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :capacitor-android:preBuild UP-TO-DATE
+> Task :capacitor-android:preReleaseBuild UP-TO-DATE
+> Task :capacitor-android:processReleaseNavigationResources
+> Task :capacitor-cordova-android-plugins:preBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:preReleaseBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:processReleaseNavigationResources
+> Task :app:processReleaseNavigationResources
+> Task :app:generateReleaseResValues
+> Task :capacitor-android:generateReleaseResValues
+> Task :app:compileReleaseNavigationResources
+> Task :capacitor-android:generateReleaseResources
+> Task :capacitor-android:packageReleaseResources
+> Task :capacitor-cordova-android-plugins:generateReleaseResValues
+> Task :capacitor-cordova-android-plugins:generateReleaseResources
+> Task :capacitor-cordova-android-plugins:packageReleaseResources
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :capacitor-android:extractDeepLinksRelease
+> Task :capacitor-android:processReleaseManifest
+> Task :capacitor-cordova-android-plugins:extractDeepLinksRelease
+> Task :capacitor-cordova-android-plugins:processReleaseManifest
+> Task :capacitor-android:writeReleaseAarMetadata
+> Task :capacitor-cordova-android-plugins:writeReleaseAarMetadata
+> Task :app:mergeReleaseResources
+> Task :app:processReleaseMainManifest
+> Task :app:processReleaseManifest
+> Task :app:processApplicationManifestReleaseForBundle
+> Task :app:checkReleaseAarMetadata
+> Task :app:packageReleaseResources
+> Task :capacitor-android:compileReleaseLibraryResources
+> Task :app:processReleaseManifestForPackage
+> Task :capacitor-cordova-android-plugins:compileReleaseLibraryResources
+> Task :capacitor-cordova-android-plugins:parseReleaseLocalResources
+> Task :capacitor-android:parseReleaseLocalResources
+> Task :app:parseReleaseLocalResources
+> Task :app:extractReleaseVersionControlInfo
+> Task :capacitor-cordova-android-plugins:javaPreCompileRelease
+> Task :capacitor-android:javaPreCompileRelease
+> Task :capacitor-android:generateReleaseRFile
+> Task :capacitor-cordova-android-plugins:generateReleaseRFile
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:processReleaseResources
+> Task :capacitor-android:compileReleaseJavaWithJavac FAILED
+
+[Incubating] Problems report is available at: file:///C:/Users/USER/OneDrive/Pictures/Documents/project/iyradlab_team_app/teamsync-pro/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':capacitor-android:compileReleaseJavaWithJavac'.
+> Java compilation initialization error
+    error: invalid source release: 21
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1m 35s
+41 actionable tasks: 41 executed
