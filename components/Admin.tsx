@@ -4,27 +4,25 @@ import {
   Users,
   ShieldCheck,
   ShieldAlert,
+  Shield,
   Search,
-  CircleDot,
-  Lock,
-  RefreshCw,
   Key,
   Download,
   Loader2,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
   Trash2,
   Filter,
-  ArrowUpDown,
-  ChevronUp,
   ChevronDown,
+  ChevronRight,
   RotateCcw,
-  Network,
   List,
   LayoutGrid,
-  CircuitBoard,
-  X
+  X,
+  Zap,
+  Briefcase,
+  Globe,
+  Plus,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import TeamHierarchy from './TeamHierarchy';
 import { User, UserRole, Team } from '../types.ts';
@@ -57,6 +55,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ user }) => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userModalMode, setUserModalMode] = useState<'details' | 'create_team'>('details');
   const [newTeamName, setNewTeamName] = useState('');
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
 
@@ -98,25 +97,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ user }) => {
     }
   };
 
-  // ...
-
-
-
-
-
   const toggleUserApproval = async (targetUser: User) => {
     try {
-      const newStatus = !targetUser.isApproved;
-      // Optimistic UI Update
-      setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, isApproved: newStatus } : u));
-      if (selectedUser && selectedUser.id === targetUser.id) {
-        setSelectedUser(prev => prev ? { ...prev, isApproved: newStatus } : null);
-      }
-
-      await api.toggleApproval(targetUser.id, newStatus);
+      await api.toggleApproval(targetUser.id, !targetUser.isApproved);
     } catch (err) {
-      console.error("Failed to update user", err);
-      fetchUsers(); // Revert on error
+      console.error("Approval toggle failed", err);
     }
   };
 
@@ -124,11 +109,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ user }) => {
     setIsExporting(true);
     setTimeout(() => {
       setIsExporting(false);
-      const headers = ['Name', 'Email', 'Role', 'Activity Status', 'Authorization Status'];
+      const headers = ['ID', 'Name', 'Email', 'Role', 'Status', 'Approved'];
       const rows = users.map(u => [
-        `"${u.name}"`, `"${u.email}"`, `"${u.role}"`,
+        u.id,
+        u.name,
+        u.email,
+        u.role,
         u.isActive ? 'Active' : 'Disabled',
-        u.isApproved ? 'Approved' : 'Pending'
+        u.isApproved ? 'Yes' : 'No'
       ].join(','));
 
       const csvContent = [headers.join(','), ...rows].join('\n');
@@ -136,50 +124,29 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ user }) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Personnel_Registry_${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = `Registry_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
     }, 1000);
-  };
-
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      if (sortOrder === 'asc') setSortOrder('desc');
-      else if (sortOrder === 'desc') {
-        setSortField(null);
-        setSortOrder(null);
-      }
-    } else {
-      setSortField(field);
-      setSortOrder('asc');
-    }
   };
 
   const handleUpdatePasskey = async () => {
     setIsUpdatingKey(true);
     try {
       await api.updateBranchPasskey(systemPasskey);
-      alert('Branch Authorization Key Updated.');
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Failed to update passkey");
     } finally {
       setIsUpdatingKey(false);
     }
   };
 
-  // Fine Filter Logic: Omni-Search + Dropdowns + Sorting
   const processedUsers = useMemo(() => {
     let result = users.filter(u => {
-      // Omni-Search: checks name, email, role, and status text
       const searchStr = searchTerm.toLowerCase();
-      const statusText = u.isActive ? 'active' : 'disabled';
-      const gateText = u.isApproved ? 'approved' : 'pending';
       const matchesSearch =
         u.name.toLowerCase().includes(searchStr) ||
         u.email.toLowerCase().includes(searchStr) ||
-        u.role.toLowerCase().includes(searchStr) ||
-        statusText.includes(searchStr) ||
-        gateText.includes(searchStr);
+        u.role.toLowerCase().includes(searchStr);
 
       const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
       const matchesAccess = accessFilter === 'ALL' ||
@@ -196,12 +163,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ user }) => {
       result.sort((a, b) => {
         let valA: any = a[sortField];
         let valB: any = b[sortField];
-
         if (typeof valA === 'string') {
           valA = valA.toLowerCase();
           valB = valB.toLowerCase();
         }
-
         if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
         if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
         return 0;
@@ -221,605 +186,433 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ user }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 animate-in fade-in duration-700 pb-24">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
+
+      {/* SaaS Admin Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-black text-zinc-900 dark:text-white tracking-tighter uppercase">Command Center</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 font-black uppercase tracking-[0.2em] text-[10px] mt-2">Registry Management Node v2.0.5</p>
+          <h1 className="text-3xl font-bold  text-foreground">Administration</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage global workspace configuration, users, and team structures.</p>
         </div>
-        <button
-          onClick={handlePersonnelDownload}
-          disabled={isExporting}
-          className="bg-zinc-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all shadow-xl flex items-center gap-2"
-        >
-          {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          {isExporting ? 'Processing Registry...' : 'Personnel Management download'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handlePersonnelDownload}
+            disabled={isExporting}
+            className="saas-button-outline"
+          >
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Download className="w-4 h-4 mr-2" />}
+            Export Registry
+          </button>
+        </div>
       </div>
 
-      {/* SYSTEM SECURITY SECTION */}
-      <section className="bg-zinc-900 border border-zinc-800 p-8 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
-        <div className="flex items-center gap-4">
-          <div className="p-4 bg-red-500/10 rounded-2xl">
-            <ShieldCheck className="w-8 h-8 text-red-500" />
+      {/* Workspace Access Config */}
+      <div className="saas-card p-6 md:p-8 flex flex-col lg:flex-row items-center justify-between gap-8 border-accent/20 bg-accent/[0.02]">
+        <div className="flex items-center gap-5">
+          <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center border border-accent/20">
+            <Key className="w-6 h-6 text-accent" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-white uppercase tracking-tighter">Branch Authorization Key</h2>
-            <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Required for new Team Leaders to register under YOUR branch.</p>
+            <h3 className="text-base font-bold text-foreground ">Workspace Access Key</h3>
+            <p className="text-xs font-medium text-muted-foreground mt-0.5">Global key required for new members to join this workspace branch.</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-black/40 p-2 rounded-xl border border-zinc-800">
-          <Key className="w-4 h-4 text-zinc-500 ml-2" />
-          <div className="flex items-center gap-3">
+          <div className="flex w-full lg:w-auto items-center gap-2 bg-background border border-border rounded-lg p-1.5 shadow-sm ml-auto">
             <input
               type="text"
               value={systemPasskey}
-              onChange={(e) => setSystemPasskey(e.target.value)}
-              placeholder="ENTER KEY"
-              className="bg-transparent border-none text-white font-mono font-bold text-sm focus:ring-0 w-32 placeholder:text-zinc-700"
+              onChange={(e) => setSystemPasskey(e.target.value.toUpperCase())}
+              placeholder="CONFIG_KEY_..."
+              className="bg-transparent border-none text-sm font-mono font-bold text-foreground focus:ring-0 px-4 w-48"
             />
-            <button
-              onClick={() => setSystemPasskey(Math.random().toString(36).slice(-8).toUpperCase())}
-              className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-colors"
-              title="Generate Random Key"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
             <button
               onClick={handleUpdatePasskey}
               disabled={isUpdatingKey}
-              className="bg-white text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:opacity-90 disabled:opacity-50"
+              className="saas-button-primary h-8 px-4 text-xs font-bold"
             >
-              {isUpdatingKey ? 'Saving...' : 'Update'}
+              {isUpdatingKey ? 'Updating...' : 'Update Key'}
             </button>
           </div>
-        </div>
-      </section>
+      </div>
 
-      {/* PENDING TEAM LEADER REQUESTS (Verified by Key, Awaiting Admin Click) */}
-      {users.some(u => u.role === UserRole.TEAM_LEADER && !u.isApproved && !u.teamId) && (
-        <section className="bg-amber-500/10 border border-amber-500/20 rounded-[2.5rem] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl animate-in slide-in-from-top-4 fade-in duration-700">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-amber-500/20 rounded-2xl"><ShieldAlert className="w-6 h-6 text-amber-500 animate-pulse" /></div>
-            <div>
-              <h2 className="text-xl font-black uppercase tracking-widest text-amber-500">Pending Command Authorization</h2>
-              <p className="text-amber-500/60 text-[10px] font-bold uppercase tracking-widest">Leaders Verified. Awaiting Final Approval.</p>
-            </div>
+      {/* Actionable Queues */}
+      {users.some(u => u.role === UserRole.TEAM_LEADER && !u.isApproved) && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
+            <h3 className="text-sm font-bold   text-muted-foreground/80">Pending Authorizations</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {users.filter(u => u.role === UserRole.TEAM_LEADER && !u.isApproved && !u.teamId).map(leader => (
-              <div key={leader.id} className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl flex flex-col gap-4">
-                <div className="flex items-center gap-4">
-                  <img src={leader.avatar} className="w-12 h-12 rounded-2xl grayscale" />
-                  <div>
-                    <p className="text-sm font-black uppercase text-white">{leader.name}</p>
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Awaiting Approval</p>
+            {users.filter(u => u.role === UserRole.TEAM_LEADER && !u.isApproved).map(user => (
+              <div key={user.id} className="saas-card p-5 group flex flex-col justify-between h-full bg-card/50">
+                <div className="flex items-center gap-4 mb-6">
+                  <img src={user.avatar} className="w-12 h-12 rounded-lg object-cover bg-muted border border-border" />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-bold text-foreground truncate">{user.name}</h4>
+                    <p className="text-[10px] font-medium text-muted-foreground mt-0.5  tracking-wider">{user.requestedTeamName ? `Req: ${user.requestedTeamName}` : 'Leader Identity Check'}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => toggleUserApproval(leader)}
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-black py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" /> Authorize Access
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* INCOMPLETE SETUP (Approved but No Team) */}
-      {users.some(u => u.role === UserRole.TEAM_LEADER && u.isApproved && !u.teamId) && (
-        <section className="bg-indigo-500/10 border border-indigo-500/20 rounded-[2.5rem] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl animate-in slide-in-from-top-4 fade-in duration-700 mt-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-indigo-500/20 rounded-2xl"><ShieldCheck className="w-6 h-6 text-indigo-500 animate-pulse" /></div>
-            <div>
-              <h2 className="text-xl font-black uppercase tracking-widest text-indigo-500">Active - Pending Initialization</h2>
-              <p className="text-indigo-500/60 text-[10px] font-bold uppercase tracking-widest">Authorized. Waiting for Leader to Create Unit.</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {users.filter(u => u.role === UserRole.TEAM_LEADER && u.isApproved && !u.teamId).map(leader => (
-              <div key={leader.id} className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl flex items-center gap-4">
-                <img src={leader.avatar} className="w-12 h-12 rounded-2xl grayscale" />
-                <div>
-                  <p className="text-sm font-black uppercase text-white">{leader.name}</p>
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Creating Unit...</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* PENDING TEAM REQUESTS SECTION (Legacy or Manual) */}
-      {users.some(u => u.role === UserRole.TEAM_LEADER && !u.isApproved && u.requestedTeamName) && (
-        <section className="bg-amber-500/10 border border-amber-500/20 rounded-[2.5rem] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl animate-in slide-in-from-top-4 fade-in duration-700">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-amber-500/20 rounded-2xl"><ShieldAlert className="w-6 h-6 text-amber-500 animate-pulse" /></div>
-            <div>
-              <h2 className="text-xl font-black uppercase tracking-widest text-amber-500">Pending Authorization Requests</h2>
-              <p className="text-amber-500/60 text-[10px] font-bold uppercase tracking-widest">Action Required</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {users.filter(u => u.role === UserRole.TEAM_LEADER && !u.isApproved && u.requestedTeamName).map(req => (
-              <div key={req.id} className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl flex flex-col gap-4">
-                <div className="flex items-center gap-4">
-                  <img src={req.avatar} className="w-12 h-12 rounded-2xl" />
-                  <div>
-                    <p className="text-sm font-black uppercase text-white">{req.name}</p>
-                    <p className="text-[10px] font-bold text-zinc-500">{req.email}</p>
-                  </div>
-                </div>
-
-                <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-900">
-                  <p className="text-[9px] font-black uppercase text-zinc-600 mb-1">Requested Unit ID</p>
-                  <p className="text-lg font-black uppercase text-white tracking-widest">{req.requestedTeamName}</p>
-                </div>
-
-                <button
-                  onClick={async () => {
-                    if (confirm(`Approve Team "${req.requestedTeamName}" for Leader ${req.name}?`)) {
-                      try {
-                        const res = await api.approveLeaderRequest(req.id, req.requestedTeamName!);
-                        alert(`Team Approved! \n\nGenerated Passkey: ${res.passkey}\n\nPlease share this key with the Team Leader.`);
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (user.requestedTeamName) {
+                        await api.approveLeaderRequest(user.id, user.requestedTeamName);
                         fetchUsers();
                         fetchTeams();
-                      } catch (e: any) {
-                        alert(e.message);
+                      } else {
+                        toggleUserApproval(user);
                       }
-                    }
-                  }}
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-black py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" /> Authorize & Generate Key
-                </button>
+                    }}
+                    className="flex-1 saas-button-primary h-9 text-xs font-bold bg-amber-500 hover:bg-amber-600"
+                  >
+                    {user.requestedTeamName ? 'Authorize & Create' : 'Grant Access'}
+                  </button>
+                  <button className="p-2 saas-button-outline border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        </section>
+        </div>
       )}
 
+      {/* Teams Grid */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <LayoutGrid className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-bold   text-muted-foreground/80">Workspace Teams</h3>
+          </div>
+          <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-md">{teams.length} Active</span>
+        </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {teams.map(team => (
+            <div
+              key={team.id}
+              onClick={() => setSelectedTeam(team)}
+              className="saas-card p-5 hover:border-accent/40 cursor-pointer group transition-all"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-10 h-10 bg-muted/50 rounded-lg flex items-center justify-center border border-border group-hover:bg-accent/10 group-hover:border-accent/30 transition-all font-bold text-lg text-muted-foreground group-hover:text-accent">
+                  {team.name.charAt(0).toUpperCase()}
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-accent group-hover:translate-x-1 transition-all" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-foreground group-hover:text-accent transition-colors">{team.name}</h4>
+                <p className="text-[10px] text-muted-foreground font-mono mt-1 opacity-60">ID: {team.id.substring(0, 8)}</p>
+              </div>
+              <div className="mt-6 flex items-center gap-2 bg-muted/30 p-2 rounded-md border border-border/50">
+                <Key className="w-3 h-3 text-emerald-500" />
+                <code className="text-xs font-mono font-bold text-emerald-500 tracking-wider flex-1 ml-1">{team.passkey}</code>
+              </div>
+            </div>
+          ))}
+          <div 
+            onClick={() => {
+              setNewTeamName('');
+              setSystemPasskey('KEY_' + Math.random().toString(36).substring(2, 8).toUpperCase());
+              setUserModalMode('create_team');
+            }}
+            className="saas-card border-dashed flex flex-col items-center justify-center p-6 text-center group hover:bg-muted/30 cursor-pointer min-h-[160px]"
+          >
+            <Plus className="w-6 h-6 text-muted-foreground/40 mb-2 group-hover:text-accent transition-colors" />
+            <span className="text-xs font-bold text-muted-foreground">New Team Node</span>
+          </div>
+        </div>
+      </div>
 
-      {/* ACTIVE UNITS LIST */}
-      <section className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-8 md:p-12 mb-8 shadow-2xl">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-3 bg-zinc-800 rounded-2xl"><ShieldCheck className="w-6 h-6 text-white" /></div>
-          <div>
-            <h2 className="text-xl font-black uppercase text-white tracking-widest">Active Units</h2>
-            <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Operational Teams and Access Keys</p>
+      {/* Personnel Registry Section */}
+      <div className="space-y-6 pt-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
+          <div className="flex items-center gap-4">
+            <h3 className="text-lg font-bold  text-foreground">Personnel Registry</h3>
+            <div className="flex items-center bg-muted p-1 rounded-md border border-border">
+              <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-sm transition-all ${viewMode === 'list' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                <List className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => setViewMode('hierarchy')} className={`p-1.5 rounded-sm transition-all ${viewMode === 'hierarchy' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                <Shield className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-foreground transition-all" />
+              <input
+                type="text"
+                placeholder="Search personnel..."
+                className="saas-input pl-9 h-9 w-[240px]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button onClick={resetFilters} className="saas-button-outline w-9 p-0 h-9">
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
-        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden max-h-[400px] overflow-y-auto custom-scrollbar">
-          <div className="p-6 sticky top-0 bg-zinc-900/90 border-b border-zinc-800 backdrop-blur-md z-10 flex justify-between items-center">
-            <p className="text-[10px] font-black uppercase text-zinc-400">Deployed Units</p>
-            <span className="bg-zinc-800 text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-zinc-700">{teams.length} DETECTED</span>
+        {viewMode === 'hierarchy' ? (
+          <div className="saas-card p-8 bg-card/40">
+            <TeamHierarchy users={users} teams={teams} onNodeClick={u => { setSelectedUser(u); setUserModalMode('details'); }} />
           </div>
+        ) : (
+          <div className="saas-card overflow-hidden">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border">
+                    <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground  tracking-wider">User</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground  tracking-wider">Role</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground  tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground  tracking-wider">Team</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground  tracking-wider text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {processedUsers.map(u => (
+                    <tr key={u.id} className="hover:bg-muted/20 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <img src={u.avatar} className="w-8 h-8 rounded-full border border-border" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{u.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`text-[10px] font-bold  tracking-wider px-2 py-0.5 rounded-md border ${u.role === UserRole.ADMIN ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
+                          u.role === UserRole.TEAM_LEADER ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                            'bg-muted text-muted-foreground border-border'
+                          }`}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full ${u.isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-muted-foreground/30'}`} />
+                          <span className="text-[11px] font-medium text-foreground">{u.isActive ? 'Active' : 'Disabled'}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-[11px] font-medium text-muted-foreground">{u.teamId ? teams.find(t => t.id === u.teamId)?.name || 'Default' : 'N/A'}</span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => { setSelectedUser(u); setUserModalMode('details'); }}
+                          className="saas-button-outline h-8 py-0 px-3 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          Edit Profile
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
 
-          <div className="p-4 space-y-3">
-            {teams.length === 0 ? (
-              <div className="text-center py-10 opacity-50">
-                <CircuitBoard className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
-                <p className="text-[10px] uppercase font-bold text-zinc-500">No active units found</p>
+      {/* Detail Overlays Redesign (Standard SaaS Modals) */}
+      {selectedUser && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm animate-in fade-in" onClick={() => setSelectedUser(null)} />
+          <div className="relative saas-card w-full max-w-lg animate-in zoom-in-95 overflow-hidden">
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <h3 className="text-lg font-bold text-foreground">Personnel Profile</h3>
+              <button onClick={() => setSelectedUser(null)} className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="p-8 flex flex-col items-center text-center">
+              <div className="relative mb-6">
+                <img src={selectedUser.avatar} className="w-24 h-24 rounded-2xl object-cover border border-border bg-muted shadow-lg" />
+                <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-card ${selectedUser.isActive ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
               </div>
-            ) : (
-              teams.map(team => (
-                <div
-                  key={team.id}
-                  onClick={() => setSelectedTeam(team)}
-                  className="group flex items-center justify-between p-4 bg-zinc-900 hover:bg-zinc-800 rounded-2xl transition-all border border-zinc-800 hover:border-zinc-700 cursor-pointer"
+              <h2 className="text-xl font-bold text-foreground">{selectedUser.name}</h2>
+              <p className="text-sm text-muted-foreground mt-1">{selectedUser.email}</p>
+
+              <div className="grid grid-cols-2 gap-3 w-full mt-10">
+                <div className="bg-muted/30 p-4 rounded-xl border border-border/50">
+                  <p className="text-[10px] font-bold text-muted-foreground   mb-1">Auth Level</p>
+                  <p className="text-sm font-bold text-foreground">{selectedUser.role}</p>
+                </div>
+                <div className="bg-muted/30 p-4 rounded-xl border border-border/50">
+                  <p className="text-[10px] font-bold text-muted-foreground   mb-1">Status</p>
+                  <p className={`text-sm font-bold ${selectedUser.isActive ? 'text-emerald-500' : 'text-muted-foreground'}`}>{selectedUser.isActive ? 'Active' : 'Disabled'}</p>
+                </div>
+              </div>
+
+              <div className="w-full h-px bg-border/50 my-8" />
+
+              <div className="w-full flex gap-3">
+                <button
+                  onClick={() => toggleUserApproval(selectedUser)}
+                  className={`flex-1 saas-button-outline ${selectedUser.isApproved ? 'border-amber-500/30 text-amber-500' : 'border-indigo-500/30 text-indigo-500'} font-bold`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-950 flex items-center justify-center text-zinc-400 group-hover:text-white group-hover:bg-indigo-500 transition-all font-bold text-xs border border-zinc-800">
-                      {team.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-white group-hover:text-indigo-400 transition-colors">{team.name}</p>
-                      <p className="text-[9px] text-zinc-500 font-mono">ID: {team.id.substring(0, 6)}...</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <p className="text-[9px] text-zinc-600 uppercase font-black tracking-widest mb-1">Access Key</p>
-                    <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-zinc-800">
-                      <Key className="w-3 h-3 text-emerald-500" />
-                      <code className="text-xs font-mono font-bold text-emerald-400 tracking-widest leading-none">{team.passkey}</code>
+                  {selectedUser.isApproved ? 'Revoke Approval' : 'Grant Approval'}
+                </button>
+                <button className="saas-button-outline w-11 p-0 border-red-500/30 text-red-500">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Team Oversight Overlay */}
+      {selectedTeam && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm animate-in fade-in" onClick={() => setSelectedTeam(null)} />
+          <div className="relative saas-card w-full max-w-4xl animate-in zoom-in-95 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-border flex items-center justify-between bg-card">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-accent rounded-lg flex items-center justify-center text-white font-bold text-lg">{selectedTeam.name.charAt(0).toUpperCase()}</div>
+                <div>
+                  <h3 className="text-lg font-bold text-foreground leading-none">{selectedTeam.name}</h3>
+                  <p className="text-[10px] font-mono text-muted-foreground mt-1">UUID: {selectedTeam.id}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedTeam(null)} className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="flex-1 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-border overflow-hidden">
+              <div className="w-full md:w-1/2 p-8 space-y-8 overflow-y-auto custom-scrollbar">
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-muted-foreground   pl-1">Configuration</h4>
+                  <div className="saas-card p-6 bg-accent/[0.02] border-accent/20">
+                    <p className="text-[10px] font-bold text-muted-foreground   mb-3">Encryption Passkey</p>
+                    <div className="flex items-center justify-between bg-background border border-border/50 p-4 rounded-lg">
+                      <code className="text-lg font-mono font-bold text-emerald-500 tracking-wider">{selectedTeam.passkey}</code>
+                      <Key className="w-5 h-5 text-muted-foreground/30" />
                     </div>
                   </div>
                 </div>
-              ))
-            )}
+
+                <div className="space-y-4 pt-10">
+                  <h4 className="text-xs font-bold text-muted-foreground   pl-1">Danger Zone</h4>
+                  <button
+                    onClick={async () => {
+                      if (confirm(`Are you sure you want to delete "${selectedTeam.name}"? This will detach all members.`)) {
+                        await api.deleteTeam(selectedTeam.id);
+                        fetchTeams();
+                        setSelectedTeam(null);
+                      }
+                    }}
+                    className="w-full py-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white transition-all shadow-sm shadow-red-500/5"
+                  >
+                    Decommission Team Node
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full md:w-1/2 p-8 bg-muted/5 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between mb-6">
+                  <h4 className="text-xs font-bold text-muted-foreground   pl-1">Team Roster</h4>
+                  <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-md">{users.filter(u => u.teamId === selectedTeam.id).length} Members</span>
+                </div>
+
+                <div className="space-y-3 overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                  {users.filter(u => u.teamId === selectedTeam.id).map(member => (
+                    <div key={member.id} className="flex items-center gap-4 p-4 saas-card bg-card/50 border-border/40 hover:border-accent/40 transition-all cursor-pointer">
+                      <img src={member.avatar} className="w-10 h-10 rounded-lg object-cover bg-muted border border-border" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-foreground truncate">{member.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate  ">{member.role}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/30" />
+                    </div>
+                  ))}
+                  {users.filter(u => u.teamId === selectedTeam.id).length === 0 && (
+                    <div className="py-20 text-center border-2 border-dashed border-border/50 rounded-2xl">
+                      <Users className="w-8 h-8 text-muted-foreground/20 mx-auto mb-3" />
+                      <p className="text-xs text-muted-foreground">No members assigned to this team.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </section>
+      )}
 
-      {/* Fine Filter Interface */}
-      < div className="space-y-6" >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between px-2 gap-6">
-          <h2 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-[0.2em] flex items-center gap-2">
-            <Users className="w-5 h-5" /> Personnel Registry
-          </h2>
-
-          <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'list' ? 'bg-white dark:bg-black shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'}`}
-            >
-              <List className="w-3 h-3" /> List
-            </button>
-            <button
-              onClick={() => setViewMode('hierarchy')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'hierarchy' ? 'bg-white dark:bg-black shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'}`}
-            >
-              <Network className="w-3 h-3" /> Structure
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between px-2 gap-6">
-          <div className="flex flex-wrap items-center gap-3 w-full">
-            <div className="relative min-w-[280px]">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Omni-Search (Name, Role, Status...)"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl pl-12 pr-4 py-3 text-xs font-bold focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white outline-none transition-all shadow-sm"
-              />
+      {/* New Team Creation Modal */}
+      {userModalMode === 'create_team' && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm animate-in fade-in" onClick={() => setUserModalMode('details')} />
+          <div className="relative saas-card w-full max-w-md animate-in zoom-in-95 overflow-hidden p-8">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-xl font-bold text-foreground">Launch New Team</h3>
+              <button onClick={() => setUserModalMode('details')} className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all"><X className="w-5 h-5" /></button>
             </div>
 
-            <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800/50 p-2 rounded-[1.25rem] border border-zinc-200 dark:border-zinc-800">
-              <div className="px-2 text-zinc-400"><Filter className="w-3.5 h-3.5" /></div>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Team Designation</label>
+                <input 
+                  type="text" 
+                  value={newTeamName} 
+                  onChange={e => setNewTeamName(e.target.value)}
+                  placeholder="e.g. CORE ANALYTICS"
+                  className="saas-input h-12"
+                />
+              </div>
 
-              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-[9px] font-black uppercase tracking-widest py-2 px-3 rounded-xl border-none outline-none cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                <option value="ALL">All Levels</option>
-                <option value={UserRole.ADMIN}>ADMIN</option>
-                <option value={UserRole.TEAM_LEADER}>LEADER</option>
-                <option value={UserRole.MEMBER}>MEMBER</option>
-              </select>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Access Passkey</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={systemPasskey} 
+                    onChange={e => setSystemPasskey(e.target.value.toUpperCase())}
+                    className="saas-input h-12 font-mono flex-1 text-center font-bold tracking-widest bg-muted/20"
+                  />
+                  <button 
+                    onClick={() => setSystemPasskey('KEY_' + Math.random().toString(36).substring(2, 8).toUpperCase())}
+                    className="saas-button-outline w-12 p-0 flex items-center justify-center"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
 
-              <select value={accessFilter} onChange={(e) => setAccessFilter(e.target.value)} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-[9px] font-black uppercase tracking-widest py-2 px-3 rounded-xl border-none outline-none cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                <option value="ALL">All Gates</option>
-                <option value="APPROVED">APPROVED</option>
-                <option value="PENDING">PENDING</option>
-              </select>
-
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-[9px] font-black uppercase tracking-widest py-2 px-3 rounded-xl border-none outline-none cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                <option value="ALL">All States</option>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="DISABLED">DISABLED</option>
-              </select>
-
-              <button onClick={resetFilters} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors" title="Clear All Filters">
-                <RotateCcw className="w-4 h-4" />
+              <button 
+                onClick={async () => {
+                  if (!newTeamName) return;
+                  setIsCreatingTeam(true);
+                  try {
+                    await api.createTeam(newTeamName, systemPasskey);
+                    const branch = await api.getMyBranch();
+                     if (branch) {
+                        const teamsData = await api.getTeams();
+                        setTeams(teamsData);
+                     }
+                    setUserModalMode('details');
+                  } catch (e) {
+                    console.error(e);
+                  } finally {
+                    setIsCreatingTeam(false);
+                  }
+                }}
+                disabled={isCreatingTeam || !newTeamName}
+                className="saas-button-primary w-full h-12 shadow-xl shadow-accent/20"
+              >
+                {isCreatingTeam ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Establish Team Node'}
               </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Registry Table or Hierarchy View */}
-        <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm overflow-hidden min-h-[600px]">
-          {viewMode === 'list' ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-zinc-50 dark:bg-zinc-800/50 text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest border-b border-zinc-100 dark:border-zinc-800">
-                    <th className="px-8 py-6 cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors" onClick={() => toggleSort('name')}>
-                      <div className="flex items-center gap-2">Name {sortField === 'name' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</div>
-                    </th>
-                    <th className="px-8 py-6 cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors" onClick={() => toggleSort('role')}>
-                      <div className="flex items-center gap-2">Role {sortField === 'role' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</div>
-                    </th>
-                    <th className="px-8 py-6 cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors" onClick={() => toggleSort('isApproved')}>
-                      <div className="flex items-center gap-2">Access Gate {sortField === 'isApproved' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</div>
-                    </th>
-                    <th className="px-8 py-6 cursor-pointer hover:text-zinc-900 dark:hover:text-white transition-colors" onClick={() => toggleSort('isActive')}>
-                      <div className="flex items-center gap-2">Status {sortField === 'isActive' ? (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</div>
-                    </th>
-                    <th className="px-8 py-6 text-right">Admin Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {processedUsers.length > 0 ? (
-                    processedUsers.map((u) => (
-                      <tr key={u.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/50 transition-colors group">
-                        <td className="px-8 py-6">
-                          <div className="flex items-center gap-4">
-                            <img src={u.avatar} className="w-12 h-12 rounded-2xl object-cover ring-2 ring-transparent group-hover:ring-zinc-900 dark:group-hover:ring-white transition-all" />
-                            <div>
-                              <p className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">{u.name}</p>
-                              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">{u.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-8 py-6">
-                          <span className="text-[10px] font-black uppercase text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-lg">{u.role}</span>
-                        </td>
-                        <td className="px-8 py-6">
-                          <button
-                            onClick={() => toggleUserApproval(u)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${u.isApproved ? 'bg-zinc-900 text-white dark:bg-white dark:text-black' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}`}
-                          >
-                            {u.isApproved ? <ShieldCheck className="w-2.5 h-2.5" /> : <ShieldAlert className="w-2.5 h-2.5" />}
-                            {u.isApproved ? 'Approved' : 'Pending'}
-                          </button>
-                        </td>
-                        <td className="px-8 py-6">
-                          <span className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest ${u.isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-                            <CircleDot className={`w-2.5 h-2.5 ${u.isActive ? 'animate-pulse' : ''}`} />
-                            {u.isActive ? 'Active' : 'Disabled'}
-                          </span>
-                        </td>
-                        <td className="px-8 py-6 text-right">
-                          <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => {
-                                // const updated = users.map(user => user.id === u.id ? { ...user, isActive: !user.isActive } : user);
-                                // persistUsers(updated);
-                              }}
-                              className={`p-3 rounded-xl transition-all ${u.isActive ? 'text-zinc-400 hover:text-red-600 bg-zinc-100 dark:bg-zinc-800' : 'text-emerald-600 bg-emerald-50'}`}
-                              title={u.isActive ? "Deactivate" : "Activate"}
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (u.id === user.id) return alert("Root protection active.");
-                                if (confirm("Delete this record? This action cannot be undone.")) {
-                                  try {
-                                    // Optimistic update
-                                    setUsers(prev => prev.filter(user => user.id !== u.id));
-                                    await api.deleteUser(u.id);
-                                  } catch (err) {
-                                    console.error("Failed to delete user", err);
-                                    fetchUsers(); // Revert on error
-                                    alert("Failed to delete user.");
-                                  }
-                                }
-                              }}
-                              className="p-3 text-zinc-400 hover:text-red-600 bg-zinc-100 dark:bg-zinc-800 rounded-xl"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="px-8 py-32 text-center">
-                        <div className="flex flex-col items-center gap-4">
-                          <AlertCircle className="w-12 h-12 text-zinc-200 dark:text-zinc-800" />
-                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">Registry query returned zero results</p>
-                          <button onClick={resetFilters} className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest underline underline-offset-4">Reset Parameters</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-8">
-              <TeamHierarchy users={processedUsers} teams={teams} onNodeClick={setSelectedUser} />
-            </div>
-          )}
-        </div>
-      </div >
-
-      {/* Team Details Modal */}
-      {
-        selectedTeam && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-
-              {/* Modal Header */}
-              <div className="p-8 border-b border-zinc-800 flex justify-between items-start bg-zinc-950">
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-indigo-500/10 rounded-xl"><ShieldCheck className="w-6 h-6 text-indigo-400" /></div>
-                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter">{selectedTeam.name}</h2>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Unit ID: <span className="font-mono text-zinc-300">{selectedTeam.id}</span></p>
-                    <div className="flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg">
-                      <Key className="w-3 h-3 text-amber-400" />
-                      <code className="text-[10px] font-mono font-bold text-amber-200 tracking-widest">{selectedTeam.passkey}</code>
-                    </div>
-                  </div>
-                </div>
-                <button onClick={() => setSelectedTeam(null)} className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl text-zinc-400 hover:text-white transition-all">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              {/* Modal Content - Hierarchy View */}
-              <div className="flex-1 overflow-y-auto p-4 bg-zinc-900">
-                <div className="p-4 bg-black/20 rounded-3xl min-h-[400px]">
-                  <p className="text-center text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-8">Structural Command View</p>
-                  {/** Filter users for this team only */}
-                  <TeamHierarchy users={users.filter(u => u.teamId === selectedTeam.id || u.role === UserRole.ADMIN)} teams={[selectedTeam]} onNodeClick={setSelectedUser} />
-                </div>
-              </div>
-
-              {/* Modal Footer - Member List */}
-              {/* Modal Footer - Management & Manifest */}
-              <div className="bg-zinc-950 border-t border-zinc-800 grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
-
-                {/* 1. Unit Configuration */}
-                <div className="p-8 space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-4 h-4 text-zinc-500" />
-                    <h3 className="text-xs font-black uppercase text-zinc-400 tracking-widest">Unit Configuration</h3>
-                  </div>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      defaultValue={selectedTeam.name}
-                      onBlur={(e) => {
-                        if (e.target.value !== selectedTeam.name) {
-                          if (confirm("Update Unit Identifier?")) {
-                            api.updateTeam(selectedTeam.id, { name: e.target.value }).then(() => {
-                              setSelectedTeam({ ...selectedTeam, name: e.target.value });
-                              fetchTeams();
-                            });
-                          }
-                        }
-                      }}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-zinc-700 transition-colors"
-                    />
-                    <div className="flex justify-between items-center bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase">Unit Status</span>
-                      <span className="flex items-center gap-1.5 text-[10px] font-black uppercase text-emerald-500"><CheckCircle className="w-3 h-3" /> Operational</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Access Control */}
-                <div className="p-8 space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Lock className="w-4 h-4 text-zinc-500" />
-                    <h3 className="text-xs font-black uppercase text-zinc-400 tracking-widest">Access Control</h3>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-xl p-3">
-                      <code className="font-mono text-amber-400 font-bold">{selectedTeam.passkey}</code>
-                      <button
-                        onClick={() => {
-                          if (confirm("Rotate Security Passkey? Using the old key will no longer work.")) {
-                            const newKey = Math.random().toString(36).slice(-8).toUpperCase();
-                            api.updateTeam(selectedTeam.id, { passkey: newKey }).then(() => {
-                              setSelectedTeam({ ...selectedTeam, passkey: newKey });
-                              fetchTeams();
-                            });
-                          }
-                        }}
-                        className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors" title="Rotate Passkey"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-zinc-600 leading-tight">Rolling the passkey will require all unit members to re-authenticate with the new credentials.</p>
-                  </div>
-                </div>
-
-                {/* 3. Danger Zone */}
-                <div className="p-8 space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="w-4 h-4 text-red-900" />
-                    <h3 className="text-xs font-black uppercase text-red-900 tracking-widest">Danger Zone</h3>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const confirmText = prompt(`To confirm deletion, type "${selectedTeam.name}"`);
-                      if (confirmText === selectedTeam.name) {
-                        api.deleteTeam(selectedTeam.id).then(() => {
-                          setSelectedTeam(null);
-                          fetchTeams();
-                        });
-                      }
-                    }}
-                    className="w-full py-4 bg-red-950/20 border border-red-900/30 text-red-700 hover:bg-red-950/40 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" /> Decommission Unit
-                  </button>
-                  <p className="text-[10px] text-red-900/50 leading-tight">This action is irreversible. All associated personnel will be detached from command.</p>
-                </div>
-
-              </div>
-
-              {/* Personnel Manifest (Below the grid) */}
-              <div className="p-8 bg-zinc-950 border-t border-zinc-800">
-                <h3 className="text-xs font-black uppercase text-zinc-400 mb-4 tracking-widest">Personnel Manifest</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {users.filter(u => u.teamId === selectedTeam.id).map(member => (
-                    <div key={member.id} className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
-                      <img src={member.avatar} className="w-8 h-8 rounded-lg" />
-                      <div>
-                        <p className="text-xs font-bold text-white">{member.name}</p>
-                        <p className="text-[9px] font-black uppercase text-zinc-500">{member.role}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {users.filter(u => u.teamId === selectedTeam.id).length === 0 && (
-                    <p className="text-zinc-600 text-xs italic">No personnel assigned to this unit.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      }
-
-      {/* User Details Modal */}
-      {
-        selectedUser && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl">
-              <div className="p-6 bg-zinc-950 border-b border-zinc-800 flex justify-between items-center">
-                <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400">Personnel File</h3>
-                <button onClick={() => setSelectedUser(null)} className="p-2 text-zinc-500 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
-              </div>
-
-              <div className="p-8 flex flex-col items-center text-center">
-                <img src={selectedUser.avatar} className="w-24 h-24 rounded-3xl object-cover mb-6 ring-4 ring-zinc-800" />
-                <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-1">{selectedUser.name}</h2>
-                <p className="text-xs font-mono text-zinc-500 mb-6">{selectedUser.email}</p>
-
-                <div className="flex gap-2 mb-8">
-                  <span className="bg-zinc-800 text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg">{selectedUser.role}</span>
-                  <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg ${selectedUser.isActive ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>
-                    {selectedUser.isActive ? 'Active Status' : 'Inactive'}
-                  </span>
-                </div>
-
-                <div className="w-full bg-zinc-950 rounded-xl p-4 border border-zinc-800 text-left space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500">Unit ID</span>
-                    <span className="text-[10px] font-mono text-zinc-300">{selectedUser.teamId || 'GLOBAL_ADMIN'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500">System ID</span>
-                    <span className="text-[10px] font-mono text-zinc-300">{selectedUser.id}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500">Access Gate</span>
-                    <span className={`text-[10px] font-black uppercase ${selectedUser.isApproved ? 'text-emerald-500' : 'text-amber-500'}`}>{selectedUser.isApproved ? 'GRANTED' : 'PENDING'}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 w-full mt-6">
-                  <button
-                    onClick={() => toggleUserApproval(selectedUser)}
-                    className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedUser.isApproved ? 'bg-amber-900/20 text-amber-500 hover:bg-amber-900/40' : 'bg-emerald-900/20 text-emerald-500 hover:bg-emerald-900/40'}`}
-                  >
-                    {selectedUser.isApproved ? 'Revoke Access' : 'Approve Access'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      api.deleteUser(selectedUser.id).then(() => {
-                        setUsers(prev => prev.filter(u => u.id !== selectedUser.id));
-                        setSelectedUser(null);
-                      });
-                    }}
-                    className="py-3 bg-red-900/10 text-red-500 hover:bg-red-900/30 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                  >
-                    Delete Record
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      }
-    </div >
+    </div>
   );
 };
 

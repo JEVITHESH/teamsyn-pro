@@ -22,3 +22,33 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# Agent & AI
+.agent/
+.gemini/
+
+# Android
+android/app/google-services.json
+android/build/
+android/.gradle/
+android/app/build/
+android/local.properties
+android/GeneratedPluginRegistrant.java
+*.apk
+*.aab
+apk_build_output/
+build_log_*.txt
+
+# Other
+TeamSync_Pro_Presentation.pptx

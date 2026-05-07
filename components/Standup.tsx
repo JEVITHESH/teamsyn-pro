@@ -12,7 +12,15 @@ import {
     Trash2,
     Edit2,
     X,
-    BellRing
+    BellRing,
+    Activity,
+    ShieldCheck,
+    BarChart3,
+    ArrowRight,
+    Users,
+    ChevronRight,
+    History,
+    MoreHorizontal
 } from 'lucide-react';
 
 interface StandupProps {
@@ -20,73 +28,67 @@ interface StandupProps {
 }
 
 const Standup: React.FC<StandupProps> = ({ user }) => {
-    // State
     const [activeStandup, setActiveStandup] = useState<StandupSession | null>(null);
     const [responses, setResponses] = useState<StandupResponse[]>([]);
     const [teamMembers, setTeamMembers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Leader Actions
+    const [adminSelectedTeamId, setAdminSelectedTeamId] = useState<string>(`admin_global_${user.branchId}`);
+    const [allTeams, setAllTeams] = useState<any[]>([]);
+
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [sessionTitle, setSessionTitle] = useState('');
     const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Member Actions
     const [responseMessage, setResponseMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingResponseId, setEditingResponseId] = useState<string | null>(null);
 
     const isLeader = user.role === UserRole.TEAM_LEADER || user.role === UserRole.ADMIN;
 
-    // Initial Data Load
     useEffect(() => {
-        loadData();
-    }, [user.teamId, user.role]);
+        if (user.role === UserRole.ADMIN) {
+            api.getTeams().then(setAllTeams).catch(console.error);
+        }
+    }, [user.role]);
 
-    // Construct Pending List
-    const submittedUserIds = new Set(responses.map(r => r.userId));
-    const pendingMembers = teamMembers.filter(member => !submittedUserIds.has(member.id));
-
-    const loadData = async () => {
+    useEffect(() => {
         setIsLoading(true);
-        try {
-            await Promise.all([
-                loadActiveStandup(),
-                loadTeamMembers()
-            ]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        const activeTeamId = user.role === UserRole.ADMIN ? adminSelectedTeamId : user.teamId;
 
-    const loadTeamMembers = async () => {
-        try {
-            const members = await api.getUsers();
-            setTeamMembers(members);
-        } catch (e) {
-            console.error("Failed to load members", e);
-        }
-    };
+        const unsubMembers = api.subscribeToUsers((members: any) => {
+            if (activeTeamId === `admin_global_${user.branchId}`) {
+               setTeamMembers(members.filter((m: any) => !m.teamId || m.role === UserRole.ADMIN));
+            } else {
+               setTeamMembers(members.filter((m: any) => m.teamId === activeTeamId));
+            }
+        });
 
-    const loadActiveStandup = async () => {
-        try {
-            const teamId = user.teamId || (user.role === UserRole.ADMIN ? 'admin_global' : null);
-            if (teamId) {
-                const session = await api.getActiveStandup(teamId);
+        let unsubStandup = () => { };
+
+        if (activeTeamId) {
+            unsubStandup = api.subscribeToActiveStandup(activeTeamId, (session: any) => {
                 setActiveStandup(session);
-                // Pre-fill form if editing
                 if (session) {
                     setSessionTitle(session.title);
                     setSessionDate(session.selectedDate);
                 }
-            }
-        } catch (e) {
-            console.error("Failed to load standup", e);
+                setIsLoading(false);
+            });
+        } else {
+            setIsLoading(false);
         }
-    };
 
-    // Real-time responses
+        return () => {
+            unsubMembers();
+            unsubStandup();
+        };
+    }, [user.teamId, user.role, adminSelectedTeamId]);
+
+    const submittedUserIds = new Set(responses.map(r => r.userId));
+    const pendingMembers = teamMembers.filter(member => !submittedUserIds.has(member.id));
+
     useEffect(() => {
         if (!activeStandup) return;
         const unsubscribe = api.subscribeToStandupResponses(activeStandup.id, (data) => {
@@ -95,29 +97,23 @@ const Standup: React.FC<StandupProps> = ({ user }) => {
         return () => unsubscribe();
     }, [activeStandup]);
 
-    // Handlers
     const handleCreateSession = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
         try {
-            const teamId = user.teamId || (user.role === UserRole.ADMIN ? 'admin_global' : null);
-            if (!teamId) return;
-
-            // If active standup exists, we are essentially 'updating' or 'overwriting' it for this logic
-            // But API might support update. Let's check API capabilities.
-            // existing code used createStandupSession for new.
+            const activeTeamId = user.role === UserRole.ADMIN ? adminSelectedTeamId : user.teamId;
+            if (!activeTeamId) return;
 
             await api.createStandupSession({
-                teamId,
-                title: sessionTitle || 'Daily Standup',
+                teamId: activeTeamId,
+                title: sessionTitle || 'Daily Hub Sync',
                 selectedDate: sessionDate
             });
 
-            await loadActiveStandup();
             setShowCreateModal(false);
             setSessionTitle('');
         } catch (e) {
-            alert("Failed to schedule standup");
+            console.error("Failed to schedule sync", e);
         } finally {
             setIsSaving(false);
         }
@@ -137,239 +133,300 @@ const Standup: React.FC<StandupProps> = ({ user }) => {
             }
             setResponseMessage('');
         } catch (e) {
-            alert("Failed to send update");
+            console.error("Failed to send update", e);
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleDeleteResponse = async (responseId: string) => {
-        if (!activeStandup || !confirm("Delete this update?")) return;
+        if (!activeStandup || !confirm("Archive this status update?")) return;
         await api.deleteStandupResponse(activeStandup.id, responseId);
     };
 
     const myResponse = responses.find(r => r.userId === user.id);
 
-    // Edit Logic
     const startEditResponse = (r: StandupResponse) => {
         setResponseMessage(r.message);
         setEditingResponseId(r.id);
     };
 
-    if (isLoading) return <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-emerald-500 rounded-full border-t-transparent"></div></div>;
+    if (isLoading) return <div className="p-20 text-center"><div className="animate-spin w-8 h-8 border-2 border-accent rounded-full border-t-transparent mx-auto"></div></div>;
 
     return (
-        <div className="max-w-7xl mx-auto p-6 space-y-8 min-h-screen">
-
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+        <div className="w-full space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
+            
+            {/* SaaS Standup Header */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-border/50">
                 <div>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter text-zinc-900 dark:text-white">Daily Standup</h1>
-                    <p className="text-zinc-500 font-medium text-sm">Sync with your team, track progress, and unblock blockers.</p>
+                    <h1 className="text-3xl font-bold  text-foreground">Asynchronous Standups</h1>
+                    <p className="text-muted-foreground text-sm mt-1">Daily status reports, bottlenecks, and team alignment tracking.</p>
                 </div>
-
                 {isLeader && (
-                    <button
-                        onClick={() => setShowCreateModal(true)}
-                        className="flex items-center gap-2 bg-zinc-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-lg"
-                    >
-                        <Plus className="w-4 h-4" />
-                        {activeStandup ? 'Schedule New' : 'Create Standup'}
-                    </button>
+                    <div className="flex items-center gap-4">
+                        {user.role === UserRole.ADMIN && (
+                            <select 
+                                value={adminSelectedTeamId}
+                                onChange={(e) => setAdminSelectedTeamId(e.target.value)}
+                                className="saas-input h-12 px-4 rounded-xl text-sm font-bold max-w-[200px]"
+                            >
+                                <option value={`admin_global_${user.branchId}`}>Global Ops</option>
+                                {allTeams.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
+                        )}
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="saas-button-primary h-12 px-8 flex items-center justify-center gap-3 shadow-lg shadow-accent/20 shrink-0"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span>Establish New Session</span>
+                        </button>
+                    </div>
                 )}
             </div>
 
-            {/* Create Standup Modal (Leader Only) */}
+            {/* Create Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                    <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800 shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-black uppercase tracking-tight">Schedule Standup</h2>
-                            <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full w-fit">
+                <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 bg-background/80 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="relative w-full max-w-xl saas-card bg-card p-10 shadow-2xl animate-in zoom-in-95 duration-300">
+                        <div className="flex justify-between items-start mb-10">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                   <ShieldCheck className="w-4 h-4 text-accent" />
+                                   <p className="text-[10px] font-bold text-accent   ">Node Allocation v4.1</p>
+                                </div>
+                                <h2 className="text-3xl font-bold text-foreground  ">Initialize Standup</h2>
+                            </div>
+                            <button onClick={() => setShowCreateModal(false)} className="p-2.5 rounded-xl hover:bg-muted transition-all text-muted-foreground">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <form onSubmit={handleCreateSession} className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Title</label>
+                        <form onSubmit={handleCreateSession} className="space-y-8">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-bold text-muted-foreground   pl-1 ">Institutional Label</label>
                                 <input
                                     type="text"
                                     value={sessionTitle}
                                     onChange={(e) => setSessionTitle(e.target.value)}
-                                    placeholder="e.g. Morning Sync"
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 font-bold outline-none focus:ring-2 focus:ring-emerald-500"
+                                    placeholder="Briefing Identifier"
+                                    className="saas-input h-14 font-bold "
                                 />
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Publish Date</label>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-bold text-muted-foreground   pl-1 ">Operational Date</label>
                                 <input
                                     type="date"
                                     value={sessionDate}
                                     onChange={(e) => setSessionDate(e.target.value)}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 font-bold outline-none focus:ring-2 focus:ring-emerald-500"
-                                    required
+                                    className="saas-input h-14 font-bold cursor-pointer"
+                                    style={{ colorScheme: 'dark' }}
                                 />
                             </div>
                             <button
                                 type="submit"
                                 disabled={isSaving}
-                                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest py-4 rounded-xl transition-colors disabled:opacity-50"
+                                className="w-full saas-button-primary h-14 text-sm font-bold  "
                             >
-                                {isSaving ? 'Scheduling...' : 'Confirm Schedule'}
+                                {isSaving ? 'Processing...' : 'Authorize Session'}
                             </button>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* Main Interface */}
+            {/* Main Content */}
             {!activeStandup ? (
-                <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[3rem] bg-zinc-50/50 dark:bg-zinc-900/20">
-                    <div className="w-20 h-20 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
-                        <Calendar className="w-10 h-10 text-zinc-300" />
+                <div className="flex flex-col items-center justify-center py-32 saas-card bg-card/20 border-dashed space-y-6">
+                    <div className="w-16 h-16 bg-muted/50 rounded-2xl flex items-center justify-center border border-border/50">
+                        <Calendar className="w-8 h-8 text-muted-foreground/40" />
                     </div>
-                    <h3 className="text-xl font-black uppercase text-zinc-400 tracking-widest">No Active Standup</h3>
-                    <p className="text-zinc-500 mt-2 text-sm font-medium">
-                        {isLeader ? "Create a new session to get started." : "Waiting for the team leader to schedule a standup."}
-                    </p>
+                    <div className="space-y-1 text-center">
+                        <h3 className="text-lg font-bold text-muted-foreground  tracking-[0.2em] leading-none mb-2">Sync Wave Inactive</h3>
+                        <p className="text-xs text-muted-foreground/60 font-medium  max-w-xs mx-auto">
+                            {isLeader ? "Establish a new hub session to begin tracking team movements." : "Waiting for institutional node to establish active session."}
+                        </p>
+                    </div>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
 
-                    {/* LEFT COLUMN: Input & Feed */}
-                    <div className="lg:col-span-8 space-y-8">
+                    <div className="lg:col-span-8 space-y-10">
 
-                        {/* Session Header Card */}
-                        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-xl">
-                            <div className="relative z-10">
-                                <div className="flex items-center gap-3 mb-2 opacity-80">
-                                    <Clock className="w-4 h-4" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest">
-                                        Scheduled For: {activeStandup.selectedDate ? new Date(activeStandup.selectedDate).toLocaleDateString() : 'Today'}
-                                    </span>
-                                </div>
-                                <h2 className="text-4xl font-black uppercase tracking-tighter mb-4">{activeStandup.title}</h2>
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-bold">
-                                        {responses.length} / {teamMembers.length} Submitted
+                        {/* Session Overview Card */}
+                        <div className="saas-card p-8 md:p-10 relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-8 font-bold text-foreground/[0.02] text-8xl    leading-none select-none group-hover:text-accent/[0.04] transition-all">SYNC</div>
+                            <div className="relative z-10 space-y-8">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-4">
+                                         <div className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center shadow-lg shadow-accent/20">
+                                             <Clock className="w-5 h-5" />
+                                         </div>
+                                         <span className="text-[10px] font-bold text-muted-foreground   ">
+                                             {activeStandup.selectedDate ? new Date(activeStandup.selectedDate).toLocaleDateString() : 'Active Window'}
+                                         </span>
                                     </div>
-                                    <div className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-bold">
-                                        {pendingMembers.length} Pending
+                                    {isLeader && (
+                                        <button 
+                                            onClick={async () => {
+                                                if (confirm("Are you sure you want to delete this entire standup session?")) {
+                                                    await api.deleteStandupSession(activeStandup.id);
+                                                    setActiveStandup(null);
+                                                }
+                                            }}
+                                            className="p-2 bg-muted/50 text-muted-foreground hover:bg-red-500/10 hover:text-red-500 rounded-lg transition-all"
+                                            title="Delete Standup Session"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                                <h2 className="text-3xl md:text-5xl font-bold text-foreground  leading-none ">{activeStandup.title}</h2>
+                                <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-border/30">
+                                    <div className="flex items-center gap-4 bg-muted/50 px-4 py-2 rounded-xl border border-border shadow-sm">
+                                        <span className="text-[10px] font-bold   text-muted-foreground ">Coverage</span>
+                                        <span className="text-sm font-bold text-accent  leading-none">{responses.length} / {teamMembers.length}</span>
+                                    </div>
+                                    <div className="hidden sm:block w-px h-8 bg-border/50" />
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-[10px] font-bold   text-muted-foreground ">Node Status</span>
+                                        <span className={`px-4 py-1.5 rounded-xl text-[9px] font-bold   border ${pendingMembers.length === 0 ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-accent/10 text-accent border-accent/20 animate-pulse'}`}>
+                                            {pendingMembers.length === 0 ? 'Consensus Reached' : 'Active Calibration'}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
                         </div>
 
-                        {/* Submission Area (If user hasn't submitted OR is editing) */}
+                        {/* Submission Panel */}
                         {(!myResponse || editingResponseId) && (
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm">
-                                <h3 className="text-sm font-black uppercase tracking-wide mb-4 flex items-center gap-2">
-                                    <Edit2 className="w-4 h-4 text-emerald-500" />
-                                    {editingResponseId ? 'Edit Response' : 'Submit Your Update'}
-                                </h3>
+                            <div className="saas-card p-8 md:p-10 bg-accent/[0.02] border-accent/20 shadow-xl shadow-accent/[0.02] animate-in zoom-in-95 duration-500">
+                                <div className="flex items-center gap-4 mb-8">
+                                    <Edit2 className="w-4 h-4 text-accent" />
+                                    <h3 className="text-[10px] font-bold text-foreground   ">{editingResponseId ? 'Refine Briefing' : 'Submit Operational Status'}</h3>
+                                </div>
                                 <textarea
                                     value={responseMessage}
                                     onChange={(e) => setResponseMessage(e.target.value)}
-                                    placeholder="What did you work on yesterday? What are you working on today? Any blockers?"
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 min-h-[120px] mb-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none resize-y text-zinc-900 dark:text-white"
+                                    placeholder="Report operational progress, blockers, and objective trajectories..."
+                                    className="saas-input w-full min-h-[160px] p-8 text-sm font-medium  resize-none"
                                 />
-                                <div className="flex justify-end gap-3">
+                                <div className="flex justify-end gap-6 mt-8">
                                     {editingResponseId && (
-                                        <button
-                                            onClick={() => { setEditingResponseId(null); setResponseMessage(''); }}
-                                            className="px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                                        >
-                                            Cancel
-                                        </button>
+                                        <button onClick={() => { setEditingResponseId(null); setResponseMessage(''); }} className="text-muted-foreground hover:text-foreground text-[10px] font-bold   transition-all  underline underline-offset-4 decoration-border">Cancel Update</button>
                                     )}
                                     <button
                                         onClick={handleSubmitResponse}
                                         disabled={isSubmitting || !responseMessage.trim()}
-                                        className="bg-black dark:bg-white text-white dark:text-black px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:opacity-80 transition-opacity disabled:opacity-50"
+                                        className="saas-button-primary h-12 px-10 text-[10px] font-bold   shadow-lg shadow-accent/20 disabled:opacity-50"
                                     >
-                                        {isSubmitting ? 'Posting...' : 'Post Update'}
+                                        {isSubmitting ? 'Processing...' : 'Deploy Update'}
                                     </button>
                                 </div>
                             </div>
                         )}
 
-                        {/* Responses Feed */}
-                        <div className="space-y-4">
-                            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400 pl-2">Team Responses</h3>
+                        {/* Update Stream */}
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-4 px-2 mb-8">
+                                <h3 className="text-[10px] font-bold   text-muted-foreground ">Consolidated Reports</h3>
+                                <div className="flex-1 h-px bg-border/50" />
+                            </div>
+
                             {responses.length === 0 ? (
-                                <div className="text-center py-12 bg-zinc-50 dark:bg-zinc-900/50 rounded-3xl border border-dashed border-zinc-200 dark:border-zinc-800">
-                                    <p className="text-zinc-400 text-sm font-medium">No updates posted yet.</p>
+                                <div className="text-center py-24 saas-card bg-muted/5 border-dashed border-border/50">
+                                    <p className="text-muted-foreground/40 text-[10px] font-bold   ">Awaiting first institutional report</p>
                                 </div>
                             ) : (
-                                responses.map(response => (
-                                    <div key={response.id} className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 p-6 rounded-[2rem] hover:shadow-lg hover:border-zinc-200 dark:hover:border-zinc-700 transition-all">
-                                        <div className="flex items-start gap-4">
-                                            <img src={response.userAvatar || `https://ui-avatars.com/api/?name=${response.userName}`} alt="avatar" className="w-12 h-12 rounded-full object-cover bg-zinc-100" />
-                                            <div className="flex-1">
-                                                <div className="flex justify-between items-start">
-                                                    <div>
-                                                        <h4 className="font-bold text-zinc-900 dark:text-white">{response.userName}</h4>
-                                                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                                                            {new Date(response.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                    </div>
-                                                    {user.id === response.userId && (
-                                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => startEditResponse(response)} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-blue-500"><Edit2 className="w-4 h-4" /></button>
-                                                            <button onClick={() => handleDeleteResponse(response.id)} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                                                        </div>
-                                                    )}
+                                <div className="space-y-6">
+                                    {responses.map((response) => (
+                                        <div key={response.id} className="saas-card p-6 md:p-8 group bg-card transition-all duration-300 hover:border-accent/40 shadow-sm hover:shadow-xl hover:shadow-accent/5">
+                                            <div className="flex items-start gap-6">
+                                                <div className="shrink-0">
+                                                    <img src={response.userAvatar} className="w-12 h-12 rounded-xl object-cover grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500 border border-border" />
                                                 </div>
-                                                <div className="mt-3 text-zinc-600 dark:text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap bg-zinc-50 dark:bg-zinc-950/50 p-4 rounded-2xl">
-                                                    {response.message}
+                                                <div className="flex-1 space-y-5">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <h4 className="text-lg font-bold text-foreground   mb-1">{response.userName}</h4>
+                                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                                                <Clock className="w-3.5 h-3.5" />
+                                                                <span className="text-[9px] font-bold   ">{new Date(response.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            </div>
+                                                        </div>
+                                                        {user.id === response.userId && (
+                                                            <div className="flex gap-1.5">
+                                                                <button onClick={() => startEditResponse(response)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-accent transition-all"><Edit2 className="w-4 h-4" /></button>
+                                                                <button onClick={() => handleDeleteResponse(response.id)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[13px] font-medium text-muted-foreground leading-relaxed  border-l-2 border-accent/20 pl-6 py-1">
+                                                        {response.message}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))
+                                    ))}
+                                </div>
                             )}
                         </div>
                     </div>
 
-                    {/* RIGHT COLUMN: Stats & Missing - Only Visible to Leader for detailed view, but everyone can see basic stats */}
-                    <div className="lg:col-span-4 space-y-6">
+                    {/* Sidebar Panels */}
+                    <div className="lg:col-span-4 space-y-10">
 
-                        {/* Leader Notification Box for Missing Responses */}
+                        {/* Missing Verification Panel */}
                         {isLeader && pendingMembers.length > 0 && (
-                            <div className="bg-red-50 dark:bg-red-900/10 border-2 border-red-500/20 rounded-[2rem] p-6 animate-pulse-slow">
-                                <div className="flex items-center gap-3 mb-4 text-red-500">
-                                    <BellRing className="w-6 h-6 fill-current" />
-                                    <h3 className="text-sm font-black uppercase tracking-widest">Action Required</h3>
+                            <div className="saas-card bg-accent/[0.02] border-accent/30 p-8 shadow-sm">
+                                <div className="flex items-center gap-3 mb-8">
+                                    <BellRing className="w-5 h-5 text-accent animate-bounce" />
+                                    <h3 className="text-lg font-bold  text-foreground ">Unverified Nodes</h3>
                                 </div>
-                                <p className="text-xs font-bold text-red-400 mb-6 uppercase tracking-wider leading-relaxed">
-                                    The following members have not submitted their daily update yet.
-                                </p>
                                 <div className="space-y-3">
                                     {pendingMembers.map(member => (
-                                        <div key={member.id} className="flex items-center gap-3 bg-white dark:bg-zinc-900 p-3 rounded-xl border border-red-100 dark:border-red-900/30">
-                                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                                            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{member.name}</span>
+                                        <div key={member.id} className="flex items-center gap-4 bg-muted/40 p-4 rounded-xl border border-border/50 transition-all hover:bg-muted/80 group/member">
+                                            <div className="w-8 h-8 rounded-lg bg-card border border-border overflow-hidden grayscale group-hover/member:grayscale-0 transition-all">
+                                                <img src={member.avatar} className="w-full h-full object-cover" />
+                                            </div>
+                                            <span className="text-[10px] font-bold text-muted-foreground    truncate flex-1">{member.name}</span>
+                                            <span className="text-[8px] font-bold text-accent  animate-pulse">Pending</span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* Approved / Completed List */}
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6">
-                            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                Completed ({responses.length})
+                        {/* Status Index */}
+                        <div className="saas-card p-8">
+                            <h3 className="text-[10px] font-bold   text-muted-foreground  mb-10 flex items-center gap-3">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50" />
+                                Coverage Index
                             </h3>
-                            <div className="space-y-3">
+                            <div className="space-y-5">
                                 {responses.map(r => (
-                                    <div key={r.id} className="flex items-center gap-3 opacity-60 hover:opacity-100 transition-opacity">
-                                        <img src={r.userAvatar} className="w-6 h-6 rounded-full" alt="" />
-                                        <span className="text-xs font-bold truncate text-zinc-900 dark:text-white">{r.userName}</span>
+                                    <div key={r.id} className="flex items-center justify-between group">
+                                        <div className="flex items-center gap-4">
+                                            <img src={r.userAvatar} className="w-7 h-7 rounded-lg grayscale group-hover:grayscale-0 transition-all border border-border" />
+                                            <span className="text-[10px] font-bold text-muted-foreground    group-hover:text-foreground transition-colors">{r.userName}</span>
+                                        </div>
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shadow-sm" />
                                     </div>
                                 ))}
-                                {responses.length === 0 && <span className="text-xs text-zinc-400">No submissions yet.</span>}
+                                {responses.length === 0 && (
+                                    <p className="text-[10px] font-bold text-muted-foreground/30    text-center py-4">Index Empty</p>
+                                )}
+                            </div>
+
+                            <div className="mt-10 pt-8 border-t border-border/50 space-y-4">
+                                <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground   ">
+                                    <span>Sync Progress</span>
+                                    <span className="text-accent ">{Math.round((responses.length / (teamMembers.length || 1)) * 100)}%</span>
+                                </div>
+                                <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                     <div className="h-full bg-accent shadow-lg shadow-accent/40 transition-all duration-1000" style={{ width: `${(responses.length / (teamMembers.length || 1)) * 100}%` }} />
+                                </div>
                             </div>
                         </div>
 

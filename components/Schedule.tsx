@@ -1,9 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
-import { MOCK_SCHEDULES } from '../constants.tsx';
 import { ScheduleEvent, User, UserRole } from '../types.ts';
 import { api } from '../services/api';
-import { Calendar as CalendarIcon, MapPin, Clock, ArrowRight, Plus, Trash2, Edit3, X, Check } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, Clock, Plus, Trash2, Edit3, X, Check, Globe, HelpCircle } from 'lucide-react';
 
 interface ScheduleProps {
   user: User;
@@ -27,23 +25,11 @@ const Schedule: React.FC<ScheduleProps> = ({ user }) => {
     user.role === 'TEAM_LEADER';
 
   useEffect(() => {
-    fetchEvents();
-  }, []);
-
-  const fetchEvents = async () => {
-    try {
-      const data = await api.getSchedule();
+    const unsubscribe = api.subscribeToSchedule((data: any) => {
       setEvents(data);
-    } catch (e) {
-      console.error("Failed to fetch schedule", e);
-    }
-  };
-
-  const persist = (updated: ScheduleEvent[]) => {
-    // Legacy support removal, now purely handled via API refresh
-    setEvents(updated);
-    window.dispatchEvent(new Event('storage'));
-  };
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +47,6 @@ const Schedule: React.FC<ScheduleProps> = ({ user }) => {
         });
       }
       resetForm();
-      fetchEvents();
     } catch (e) {
       console.error("Failed to save schedule event", e);
     }
@@ -78,7 +63,7 @@ const Schedule: React.FC<ScheduleProps> = ({ user }) => {
   };
 
   const deleteEvent = async (id: string) => {
-    if (window.confirm("Remove this operational node from the timeline?")) {
+    if (window.confirm("Are you sure you want to remove this event?")) {
       try {
         await api.deleteScheduleEvent(id);
         setEvents(prev => prev.filter(ev => ev.id !== id));
@@ -98,130 +83,156 @@ const Schedule: React.FC<ScheduleProps> = ({ user }) => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-4 duration-700 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+    <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      
+      {/* SaaS Schedule Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-border/50">
         <div>
-          <h1 className="text-4xl font-black text-zinc-900 dark:text-white tracking-tighter uppercase">OPERATIONAL TIMELINE</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 font-medium italic mt-1">Strategic roadmap for team synchronization.</p>
+          <h1 className="text-3xl font-bold  text-foreground">Schedule</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage and monitor upcoming milestones and operational events.</p>
         </div>
 
         {isAuthorized && (
           <button
             onClick={() => setShowForm(!showForm)}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-xl ${showForm
-              ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white'
-              : 'bg-zinc-900 dark:bg-white text-white dark:text-black hover:opacity-90 active:scale-95'
-              }`}
+            className="saas-button-primary"
           >
-            {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {showForm ? 'Cancel' : 'Add Event'}
+            {showForm ? <X className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+            {showForm ? 'Cancel Entry' : 'Create Event'}
           </button>
         )}
       </div>
 
       {showForm && (
-        <div className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border-2 border-zinc-900 dark:border-white shadow-2xl animate-in zoom-in duration-300 mb-12">
-          <form onSubmit={handleSave} className="space-y-6">
+        <div className="saas-card p-8 md:p-10 animate-in zoom-in-95 duration-200 bg-accent/[0.02] border-accent/20">
+          <form onSubmit={handleSave} className="space-y-8 max-w-2xl mx-auto">
+            <h3 className="text-lg font-bold  text-foreground mb-6">{editingId ? 'Edit Event' : 'New Event Registration'}</h3>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Event Title</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-muted-foreground   pl-1">Event Title</label>
                 <input
                   value={title} onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-800 border-none rounded-xl px-5 py-4 text-sm focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white outline-none dark:text-white font-bold"
-                  placeholder="Ex: System Migration Phase 1"
+                  className="saas-input h-11"
+                  placeholder="Operational Goal"
+                  required
                 />
               </div>
-              <div>
-                <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Registry Date</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-muted-foreground   pl-1">Registry Date</label>
                 <input
                   type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-800 border-none rounded-xl px-5 py-4 text-sm focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white outline-none dark:text-white font-bold"
+                  className="saas-input h-11"
+                  required
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Location / Terminal</label>
+            
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-muted-foreground   pl-1">Location / Network</label>
               <input
                 value={location} onChange={(e) => setLocation(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-800 border-none rounded-xl px-5 py-4 text-sm focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white outline-none dark:text-white font-bold"
-                placeholder="Ex: Virtual Hub A / Conference Room 4"
+                className="saas-input h-11"
+                placeholder="Global Workspace"
               />
             </div>
-            <div>
-              <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Strategic Description</label>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-muted-foreground   pl-1">Description / Notes</label>
               <textarea
                 value={description} onChange={(e) => setDescription(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-800 border-none rounded-xl px-5 py-4 text-sm focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white outline-none dark:text-white font-bold min-h-[100px] resize-none"
-                placeholder="Objectives and expected outcomes..."
+                className="saas-input min-h-[100px] py-3 resize-none"
+                placeholder="Brief summary of the event objectives."
               />
             </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <button type="button" onClick={resetForm} className="px-6 py-3 rounded-xl text-zinc-400 font-black uppercase tracking-widest text-[10px] hover:bg-zinc-50 transition-colors">Discard</button>
-              <button type="submit" className="px-8 py-3 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-xl font-black uppercase tracking-widest text-[10px] shadow-xl flex items-center gap-2">
-                <Check className="w-4 h-4" /> {editingId ? 'Update Record' : 'Initialize Node'}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
+              <button type="button" onClick={resetForm} className="saas-button-secondary h-10 px-6">Discard</button>
+              <button type="submit" className="saas-button-primary h-10 px-8 shadow-lg shadow-accent/20">
+                <Check className="w-4 h-4 mr-2" /> {editingId ? 'Update Event' : 'Save Event'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      <div className="space-y-6">
-        {events.map((event) => {
+      {/* Event Timeline */}
+      <div className="space-y-4">
+        {events.length > 0 ? events.map((event) => {
           const eventDate = new Date(event.date);
           return (
-            <div key={event.id} className="group bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row overflow-hidden hover:shadow-xl transition-all duration-500">
-              <div className="bg-zinc-50 dark:bg-zinc-800/50 md:w-36 flex flex-col items-center justify-center py-8 md:py-0 border-b md:border-b-0 md:border-r border-zinc-100 dark:border-zinc-800">
-                <span className="text-zinc-900 dark:text-white font-black text-4xl tracking-tighter">{eventDate.getDate() || '??'}</span>
-                <span className="text-zinc-400 dark:text-zinc-500 font-black uppercase tracking-widest text-[10px] mt-1">
-                  {eventDate.toLocaleString('default', { month: 'short' })}
-                </span>
-              </div>
-
-              <div className="flex-1 p-8 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="bg-zinc-900 dark:bg-white text-white dark:text-black px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">
-                      Operational
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {isAuthorized && (
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => startEdit(event)} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => deleteEvent(event.id)} className="p-2 text-zinc-400 hover:text-red-500 transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-black text-zinc-900 dark:text-white mb-2 uppercase tracking-tight">{event.title}</h3>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium line-clamp-2 mb-6 leading-relaxed">{event.description}</p>
+            <div key={event.id} className="saas-card overflow-hidden hover:border-accent/30 transition-all group">
+              <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-border/50">
+                {/* Date Plate */}
+                <div className="bg-muted/10 md:w-32 flex flex-col items-center justify-center py-6 md:py-8 lg:py-10">
+                  <span className="text-3xl font-bold text-foreground leading-none">{eventDate.getDate() || '--'}</span>
+                  <span className="text-[10px] font-bold text-muted-foreground   mt-1">
+                    {eventDate.toLocaleString('default', { month: 'short' })}
+                  </span>
                 </div>
 
-                <div className="flex items-center justify-between pt-6 border-t border-zinc-50 dark:border-zinc-800">
-                  <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
-                    <MapPin className="w-4 h-4" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">{event.location || 'Undisclosed'}</span>
+                {/* Content Section */}
+                <div className="flex-1 p-6 lg:p-8 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-accent/10 border border-accent/20 text-accent px-2 py-0.5 rounded text-[10px] font-bold  tracking-wider">
+                          Internal Milestone
+                        </span>
+                        {isAuthorized && (
+                          <div className="flex items-center gap-1.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => startEdit(event)} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all">
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => deleteEvent(event.id)} className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-400/10 rounded-md transition-all">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <Globe className="w-4 h-4 text-muted-foreground/30" />
+                    </div>
+                    
+                    <h3 className="text-xl font-bold text-foreground mb-2 ">{event.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2 mb-6">
+                      {event.description || 'No additional details provided for this event.'}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-black uppercase tracking-widest">
-                    <Clock className="w-4 h-4" /> Scheduled Time Logged
+
+                  <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-border/40">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <MapPin className="w-3.5 h-3.5 text-accent" />
+                      <span className="text-[11px] font-medium truncate max-w-[150px]">{event.location || 'Remote Node'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Clock className="w-3.5 h-3.5 text-accent" />
+                      <span className="text-[11px] font-medium">Synced • 100% Reliability</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           );
-        })}
+        }) : !showForm && (
+          <div className="py-32 text-center saas-card bg-muted/5 border-dashed space-y-4">
+            <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto border border-border/50">
+                <CalendarIcon className="w-8 h-8 text-muted-foreground/40" />
+            </div>
+            <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">No events found</h3>
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto">Your operational timeline is currently clear. Milestones will appear here once registered.</p>
+            </div>
+            {isAuthorized && (
+              <button 
+                onClick={() => setShowForm(true)}
+                className="saas-button-outline h-9 px-6 text-xs mt-4"
+              >
+                Add Your First Event
+              </button>
+            )}
+          </div>
+        )}
       </div>
-
-      {events.length === 0 && (
-        <div className="text-center py-24 bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800">
-          <CalendarIcon className="w-16 h-16 text-zinc-100 dark:text-zinc-800 mx-auto mb-6" />
-          <h2 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-widest">Timeline Inactive</h2>
-          <p className="text-zinc-400 dark:text-zinc-500 text-xs font-medium mt-2">No upcoming operational nodes detected in the registry.</p>
-        </div>
-      )}
     </div>
   );
 };

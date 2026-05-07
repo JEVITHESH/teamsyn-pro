@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Ticket, TicketStatus } from '../types.ts';
 import {
-  Plus, Trash2, ChevronRight, Hash, User as UserIcon, AlertTriangle,
-  X, CheckCircle2, MoreHorizontal, Clock, ArrowRight, Layout, ListFilter
+  Plus, Trash2, Clock, CheckCircle2,
+  X, Layout, ListFilter, AlertTriangle,
+  ArrowRight, Search, Zap, Target, Activity, Cpu, ShieldAlert, ChevronRight, ChevronLeft, BarChart3, TrendingUp, Layers, CheckCircle, MoreHorizontal, User as UserIcon
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -10,13 +11,129 @@ interface TicketsProps {
   user: User;
 }
 
+const COLUMNS = [
+  {
+    id: TicketStatus.STARTED,
+    label: 'Backlog',
+    icon: <Layers className="w-4 h-4" />,
+    color: 'text-muted-foreground',
+    borderColor: 'border-border'
+  },
+  {
+    id: TicketStatus.WORK_DONE,
+    label: 'In Progress',
+    icon: <Activity className="w-4 h-4" />,
+    color: 'text-indigo-500',
+    borderColor: 'border-indigo-500/30'
+  },
+  {
+    id: TicketStatus.REVIEW,
+    label: 'Review',
+    icon: <Search className="w-4 h-4" />,
+    color: 'text-amber-500',
+    borderColor: 'border-amber-500/30'
+  },
+  {
+    id: TicketStatus.COMPLETE,
+    label: 'Completed',
+    icon: <CheckCircle className="w-4 h-4" />,
+    color: 'text-emerald-500',
+    borderColor: 'border-emerald-500/30'
+  }
+];
+
+const getPriorityStyle = (p: string) => {
+  switch (p) {
+    case 'High': return 'text-red-500 bg-red-500/10 border-red-500/20';
+    case 'Medium': return 'text-amber-500 bg-amber-500/10 border-amber-500/20';
+    case 'Low': return 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
+    default: return 'text-muted-foreground bg-muted/50 border-border';
+  }
+};
+
+interface TicketCardProps {
+  ticket: Ticket;
+  isAdmin: boolean;
+  moveTicket: (id: string, newStatus: TicketStatus) => void;
+  deleteTicket: (id: string) => void;
+}
+
+const TicketCard: React.FC<TicketCardProps> = ({ ticket, isAdmin, moveTicket, deleteTicket }) => {
+  return (
+    <div className="group relative saas-card p-4 hover:border-accent/40 transition-all duration-200 cursor-grab active:cursor-grabbing bg-card/80 backdrop-blur-sm">
+      <div className="flex justify-between items-center mb-3">
+        <span className={`text-[9px] font-bold  tracking-wider px-2 py-0.5 rounded border ${getPriorityStyle(ticket.priority)}`}>
+          {ticket.priority}
+        </span>
+        <div className="flex items-center gap-1">
+           {isAdmin && (
+             <button
+               onClick={(e) => { e.stopPropagation(); deleteTicket(ticket.id); }}
+               className="p-1 px-2 text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 rounded-md hover:bg-red-500/10"
+             >
+               <Trash2 className="w-3.5 h-3.5" />
+             </button>
+           )}
+           <button className="p-1 px-2 text-muted-foreground opacity-30 group-hover:opacity-100 hover:bg-muted rounded-md transition-all">
+              <MoreHorizontal className="w-3.5 h-3.5" />
+           </button>
+        </div>
+      </div>
+
+      <h4 className="text-sm font-bold text-foreground leading-tight mb-2 group-hover:text-accent transition-colors">
+        {ticket.title}
+      </h4>
+      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-4">
+        {ticket.description || 'No description provided.'}
+      </p>
+
+      <div className="flex items-center justify-between pt-4 border-t border-border/50">
+        <div className="flex items-center gap-2">
+          {ticket.assignedTo ? (
+            <div className="w-6 h-6 rounded-full bg-accent/20 border border-accent/20 flex items-center justify-center text-[9px] font-bold text-accent shadow-sm">
+               {ticket.assignedTo?.charAt(0).toUpperCase()}
+            </div>
+          ) : (
+             <div className="w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-muted-foreground/40">
+                <UserIcon className="w-3 h-3" />
+             </div>
+          )}
+          <span className="text-[10px] font-bold text-muted-foreground truncate max-w-[80px]">
+            {ticket.assignedTo || 'Unassigned'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1">
+          {COLUMNS.findIndex(c => c.id === ticket.status) > 0 && (
+            <button
+               onClick={() => moveTicket(ticket.id, COLUMNS[COLUMNS.findIndex(c => c.id === ticket.status) - 1].id)}
+               className="p-1 text-muted-foreground hover:text-foreground transition-all"
+            >
+               <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
+
+          {COLUMNS.findIndex(c => c.id === ticket.status) < COLUMNS.length - 1 && (
+            <button
+               onClick={() => moveTicket(ticket.id, COLUMNS[COLUMNS.findIndex(c => c.id === ticket.status) + 1].id)}
+               className="p-1 text-muted-foreground hover:text-foreground transition-all"
+            >
+               <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Tickets: React.FC<TicketsProps> = ({ user }) => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newPriority, setNewPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
   const [activeTab, setActiveTab] = useState<TicketStatus>(TicketStatus.STARTED);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  const [form, setForm] = useState({ title: '', desc: '', priority: 'Medium' as const });
 
   const isAdmin =
     user.role === UserRole.ADMIN ||
@@ -25,309 +142,216 @@ const Tickets: React.FC<TicketsProps> = ({ user }) => {
     user.role === 'TEAM_LEADER';
 
   useEffect(() => {
-    fetchTickets();
+    const Unsubscribe = api.subscribeToTickets((data: any) => setTickets(data));
+    return () => Unsubscribe();
   }, []);
-
-  const fetchTickets = async () => {
-    try {
-      const data = await api.getTickets();
-      setTickets(data);
-    } catch (e) {
-      console.error("Failed to load tickets", e);
-    }
-  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin || !newTitle.trim()) return;
+    if (!form.title.trim()) return;
 
     try {
-      await api.createTicket({ title: newTitle, description: newDesc, priority: newPriority });
-      resetForm();
-      fetchTickets();
+      await api.createTicket({
+        title: form.title,
+        description: form.desc,
+        priority: form.priority
+      });
+      setShowAddForm(false);
+      setForm({ title: '', desc: '', priority: 'Medium' });
     } catch (e) {
-      console.error("Create ticket failed", e);
-      alert("Failed to create ticket");
+      console.error("Create task failed", e);
     }
   };
 
-  const resetForm = () => {
-    setNewTitle('');
-    setNewDesc('');
-    setNewPriority('Medium');
-    setShowAddForm(false);
-  };
-
   const moveTicket = async (id: string, newStatus: TicketStatus) => {
-    // Optimistic Update
-    const oldTickets = [...tickets];
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
-
     try {
       await api.updateTicketStatus(id, newStatus);
     } catch (e) {
       console.error("Update status failed", e);
-      setTickets(oldTickets); // Revert
     }
   };
 
   const deleteTicket = async (id: string) => {
     if (!isAdmin) return;
-    if (confirm("Permanently erase this operational ticket from the registry?")) {
+    if (confirm("Move this task to the archive?")) {
       try {
         await api.deleteTicket(id);
-        setTickets(prev => prev.filter(t => t.id !== id));
       } catch (e) {
-        console.error("Failed to delete ticket", e);
-        alert("Failed to delete ticket");
+        console.error("Failed to delete task", e);
       }
     }
   };
 
-  const columns = [
-    { id: TicketStatus.STARTED, label: 'Pending', icon: <Clock className="w-4 h-4" /> },
-    { id: TicketStatus.WORK_DONE, label: 'In Progress', icon: <Layout className="w-4 h-4" /> },
-    { id: TicketStatus.REVIEW, label: 'Review', icon: <ListFilter className="w-4 h-4" /> },
-    { id: TicketStatus.COMPLETE, label: 'Complete', icon: <CheckCircle2 className="w-4 h-4" /> }
-  ];
-
-  const getPriorityColor = (p: string) => {
-    switch (p) {
-      case 'High': return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/30';
-      case 'Medium': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900/30';
-      case 'Low': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30';
-      default: return 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800';
-    }
-  };
-
-  const TicketCard = ({ ticket }: { ticket: Ticket }) => (
-    <div className="group bg-white dark:bg-zinc-900/50 p-5 rounded-2xl shadow-sm hover:shadow-lg dark:shadow-none border border-zinc-100 dark:border-zinc-800/60 hover:border-indigo-500/30 transition-all duration-300 backdrop-blur-sm">
-      <div className="flex items-start justify-between mb-3">
-        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getPriorityColor(ticket.priority)}`}>
-          {ticket.priority}
-        </span>
-        {isAdmin && (
-          <button
-            onClick={(e) => { e.stopPropagation(); deleteTicket(ticket.id); }}
-            className="opacity-0 group-hover:opacity-100 p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 leading-tight mb-2">{ticket.title}</h3>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed mb-4 line-clamp-3">{ticket.description}</p>
-
-      <div className="flex items-center justify-between pt-4 border-t border-zinc-50 dark:border-zinc-800/60 mt-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
-            <UserIcon className="w-3 h-3" />
-          </div>
-          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate max-w-[100px]">
-            {ticket.assignedTo || ticket.creator_name || 'System'}
-          </span>
-        </div>
-
-        <div className="flex gap-1">
-          {columns.findIndex(c => c.id === ticket.status) > 0 && (
-            <button
-              onClick={() => moveTicket(ticket.id, columns[columns.findIndex(c => c.id === ticket.status) - 1].id)}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-            >
-              <ArrowRight className="w-4 h-4 rotate-180" />
-            </button>
-          )}
-          {columns.findIndex(c => c.id === ticket.status) < columns.length - 1 && (
-            <button
-              onClick={() => moveTicket(ticket.id, columns[columns.findIndex(c => c.id === ticket.status) + 1].id)}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-            >
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          )}
-          {ticket.status === TicketStatus.COMPLETE && (
-            <div className="text-emerald-500 p-1.5">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+  const filteredTickets = tickets.filter(t =>
+    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (t.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <div className="max-w-7xl mx-auto h-full flex flex-col pb-20 md:pb-0">
-      {/* Header Area */}
-      <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shrink-0 bg-white/50 dark:bg-black/20 backdrop-blur-xl border-b border-zinc-100 dark:border-white/5 sticky top-0 z-40">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-500/20">
-              <Hash className="w-5 h-5" />
-            </div>
-            <h1 className="text-2xl md:text-3xl font-black text-zinc-900 dark:text-white tracking-tight">Mission Control</h1>
+    <div className="h-[calc(100vh-140px)] flex flex-col space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 overflow-hidden">
+
+      {/* Modern SaaS Header */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-2 border-b border-border/50 flex-shrink-0">
+        <div>
+          <h1 className="text-3xl font-bold  text-foreground">Support & Tasks</h1>
+          <p className="text-muted-foreground text-sm mt-1">Track issues, feature requests, and operational progress.</p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="relative group w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-foreground transition-all" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter tasks..."
+              className="saas-input h-10 pl-10"
+            />
           </div>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium pl-14 hidden md:block">
-            Operational Directives & Task Management
-          </p>
-        </div>
 
-        {isAdmin && (
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 bg-zinc-900 dark:bg-white text-white dark:text-black px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-xl hover:translate-y-[-2px] hover:shadow-2xl transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Directive</span>
-          </button>
-        )}
-      </div>
-
-      {/* Mobile Tabs */}
-      <div className="md:hidden px-4 pt-4 pb-2 sticky top-[88px] z-30 bg-white/80 dark:bg-black/80 backdrop-blur-md overflow-x-auto no-scrollbar">
-        <div className="flex gap-2 min-w-max">
-          {columns.map(col => (
             <button
-              key={col.id}
-              onClick={() => setActiveTab(col.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${activeTab === col.id
-                  ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/25'
-                  : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border border-transparent dark:border-zinc-800'
-                }`}
+              onClick={() => setShowAddForm(true)}
+              className="saas-button-primary h-10 px-6"
             >
-              {col.icon}
-              {col.label}
-              <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[9px] ${activeTab === col.id ? 'bg-white/20 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'}`}>
-                {tickets.filter(t => t.status === col.id).length}
-              </span>
+              <Plus className="w-4 h-4 mr-2" />
+              <span>Create Task</span>
             </button>
-          ))}
         </div>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 p-4 md:p-8 overflow-y-auto">
-        {/* Desktop View: Grid/Kanban */}
-        <div className="hidden md:flex gap-6 h-full overflow-x-auto pb-4">
-          {columns.map((col) => (
-            <div key={col.id} className="min-w-[320px] max-w-[360px] flex-1 flex flex-col bg-zinc-50/50 dark:bg-zinc-900/20 rounded-3xl border border-zinc-200/50 dark:border-zinc-800/50 backdrop-blur-sm">
-              <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
-                  {col.icon}
-                  <span className="text-xs font-bold uppercase tracking-wider">{col.label}</span>
+      {/* Kanban Board Layout */}
+      <div className="flex-1 hidden md:flex gap-6 overflow-hidden pb-4">
+        {COLUMNS.map((col) => {
+          const colTickets = filteredTickets.filter(t => t.status === col.id);
+          return (
+            <div key={col.id} className="flex-1 flex flex-col h-full min-w-[280px]">
+              <div className={`flex items-center justify-between px-2 mb-4 group`}>
+                <div className={`flex items-center gap-2.5 font-bold  text-[11px]  ${col.color}`}>
+                   <div className={`w-2 h-2 rounded-full bg-current opacity-40`} />
+                   {col.label}
                 </div>
-                <span className="bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold px-2 py-1 rounded-md">
-                  {tickets.filter(t => t.status === col.id).length}
+                <span className="text-[10px] font-bold text-muted-foreground bg-muted h-5 px-1.5 flex items-center justify-center rounded-md min-w-[20px]">
+                   {colTickets.length}
                 </span>
               </div>
-              <div className="p-4 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
-                {tickets.filter(t => t.status === col.id).length > 0 ? (
-                  tickets.filter(t => t.status === col.id).map(ticket => (
-                    <TicketCard key={ticket.id} ticket={ticket} />
-                  ))
-                ) : (
-                  <div className="h-32 flex flex-col items-center justify-center text-zinc-400/50 dashed-border rounded-xl">
-                    <p className="text-xs font-medium">No tickets</p>
-                  </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
+                {colTickets.map(ticket => (
+                  <TicketCard
+                    key={ticket.id}
+                    ticket={ticket}
+                    isAdmin={isAdmin}
+                    moveTicket={moveTicket}
+                    deleteTicket={deleteTicket}
+                  />
+                ))}
+                
+                {colTickets.length === 0 && (
+                   <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-border/50 rounded-2xl bg-muted/5 opacity-50">
+                      <p className="text-[10px] font-bold text-muted-foreground  ">Empty</p>
+                   </div>
                 )}
               </div>
             </div>
+          );
+        })}
+      </div>
+
+      {/* Mobile view logic is still useful but we improve its styling */}
+      <div className="md:hidden flex-1 flex flex-col bg-card/30 border border-border rounded-2xl overflow-hidden">
+        <div className="flex overflow-x-auto p-3 gap-2 no-scrollbar border-b border-border/50 bg-muted/20">
+          {COLUMNS.map(col => (
+            <button
+              key={col.id}
+              onClick={() => setActiveTab(col.id as TicketStatus)}
+              className={`px-4 py-2 rounded-lg font-bold  text-[10px]  transition-all whitespace-nowrap ${activeTab === col.id
+                ? 'bg-accent text-white shadow-md'
+                : 'text-muted-foreground hover:bg-muted'
+                }`}
+            >
+              {col.label} ({filteredTickets.filter(t => t.status === col.id).length})
+            </button>
           ))}
         </div>
 
-        {/* Mobile View: List filtered by Tab */}
-        <div className="md:hidden space-y-4">
-          {tickets.filter(t => t.status === activeTab).length > 0 ? (
-            tickets.filter(t => t.status === activeTab).map(ticket => (
-              <TicketCard key={ticket.id} ticket={ticket} />
-            ))
-          ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-zinc-400 dark:text-zinc-600">
-              <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-4">
-                <Layout className="w-8 h-8 opacity-50" />
-              </div>
-              <p className="text-sm font-bold uppercase tracking-widest opacity-70">No Tasks Here</p>
-            </div>
-          )}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+          {filteredTickets.filter(t => t.status === activeTab).map(ticket => (
+            <TicketCard
+              key={ticket.id}
+              ticket={ticket}
+              isAdmin={isAdmin}
+              moveTicket={moveTicket}
+              deleteTicket={deleteTicket}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Add Modal */}
+      {/* Streamlined Create Task Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-4 sm:p-6">
-          <div
-            className="absolute inset-0 bg-zinc-900/60 backdrop-blur-md"
-            onClick={resetForm}
-          />
-          <div className="relative w-full max-w-lg bg-white dark:bg-zinc-950 rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 fade-in duration-300">
-            <div className="p-6 border-b border-zinc-100 dark:border-zinc-900 flex items-center justify-between">
-              <h2 className="text-lg font-black uppercase tracking-wide text-zinc-900 dark:text-white">New Directive</h2>
-              <button
-                onClick={resetForm}
-                className="p-2 bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAdd} className="p-6 md:p-8 space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">Title</label>
-                <input
-                  required
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Task Header"
-                  className="w-full bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">Priority Level</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {['Low', 'Medium', 'High'].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setNewPriority(p as any)}
-                      className={`py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide transition-all border ${newPriority === p
-                          ? 'bg-indigo-500 text-white border-indigo-500 shadow-md'
-                          : 'bg-white dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50'
-                        }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm animate-in fade-in" onClick={() => setShowAddForm(false)} />
+          <div className="relative saas-card w-full max-w-lg animate-in zoom-in-95 overflow-hidden">
+             <div className="p-6 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                   <Target className="w-5 h-5 text-accent" />
+                   <h3 className="text-lg font-bold text-foreground">Create New Task</h3>
                 </div>
-              </div>
+                <button onClick={() => setShowAddForm(false)} className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all"><X className="w-5 h-5" /></button>
+             </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">Description</label>
-                <textarea
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="Operational details..."
-                  className="w-full h-32 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                />
-              </div>
+             <form onSubmit={handleAdd} className="p-8 space-y-6">
+               <div className="space-y-2">
+                 <label className="text-[11px] font-bold text-muted-foreground   pl-1">Task Title</label>
+                 <input
+                   required
+                   autoFocus
+                   value={form.title}
+                   onChange={(e) => setForm({ ...form, title: e.target.value })}
+                   className="saas-input h-11"
+                   placeholder="Refactor auth components..."
+                 />
+               </div>
 
-              <button
-                type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-xs shadow-xl shadow-indigo-500/20 transition-all hover:scale-[1.02]"
-              >
-                Create Directive
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+               <div className="space-y-2">
+                 <label className="text-[11px] font-bold text-muted-foreground   pl-1">Priority Level</label>
+                 <div className="grid grid-cols-3 gap-2">
+                   {['Low', 'Medium', 'High'].map((p) => (
+                     <button
+                       key={p}
+                       type="button"
+                       onClick={() => setForm({ ...form, priority: p as any })}
+                       className={`h-10 rounded-lg font-bold  tracking-wider text-[11px] transition-all border ${form.priority === p
+                         ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20'
+                         : 'bg-muted/50 border-border text-muted-foreground hover:border-accent/40'
+                         }`}
+                     >
+                       {p}
+                     </button>
+                   ))}
+                 </div>
+               </div>
 
-      {/* Read Only Warning for non-admins */}
-      {!isAdmin && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-sm">
-          <div className="bg-zinc-800/90 backdrop-blur-md p-3 rounded-2xl shadow-xl flex items-center justify-center gap-3 text-zinc-200 border border-white/10">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Read Only Mode</span>
+               <div className="space-y-2">
+                 <label className="text-[11px] font-bold text-muted-foreground   pl-1">Detailed Description</label>
+                 <textarea
+                   value={form.desc}
+                   onChange={(e) => setForm({ ...form, desc: e.target.value })}
+                   className="saas-input min-h-[120px] py-4 resize-none"
+                   placeholder="Outline the steps or context for this task..."
+                 />
+               </div>
+
+               <div className="pt-4 flex gap-3">
+                  <button type="button" onClick={() => setShowAddForm(false)} className="flex-1 saas-button-secondary h-11">Cancel</button>
+                  <button
+                      type="submit"
+                      disabled={!form.title.trim()}
+                      className="flex-[2] saas-button-primary h-11 shadow-lg shadow-accent/20"
+                  >
+                      Create Task Action
+                  </button>
+               </div>
+             </form>
           </div>
         </div>
       )}

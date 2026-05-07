@@ -17,7 +17,8 @@ import {
     orderBy,
     deleteDoc,
     where,
-    limit
+    limit,
+    arrayUnion
 } from 'firebase/firestore';
 import { User, UserRole, TicketStatus } from '../types';
 
@@ -58,6 +59,51 @@ export const api = {
         });
 
         return { id: docRef.id, ...newTeam };
+    },
+
+    subscribeToUsers: (callback: (users: User[]) => void) => {
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
+
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
+
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
+
+            const userData = userDoc.data() as User;
+            let q;
+
+            if (userData.role === UserRole.ADMIN) {
+                q = query(collection(db, "users"), where("branchId", "==", userData.branchId));
+            } else {
+                if (!userData.teamId) {
+                    q = query(collection(db, "users"),
+                        where("branchId", "==", userData.branchId),
+                        where("role", "==", UserRole.ADMIN)
+                    );
+                } else {
+                    q = query(collection(db, "users"), where("branchId", "==", userData.branchId));
+                }
+            }
+
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                if (isCancelled) return;
+                const users = snapshot.docs.map(mapDoc) as User[];
+                if (userData.role === UserRole.ADMIN) {
+                    callback(users);
+                } else {
+                    const filtered = users.filter(u => u.teamId === userData.teamId || u.role === UserRole.ADMIN);
+                    callback(filtered);
+                }
+            });
+        })();
+
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
     },
 
     // BRANCH MANAGEMENT
@@ -143,27 +189,31 @@ export const api = {
     },
 
     subscribeToTeams: (callback: (teams: any[]) => void) => {
-        const currentUser = auth.currentUser;
-        if (!currentUser) return () => { };
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
 
-        // Need to get branchId first. This is async inside a synchronous subscription.
-        // Quick fix: Set up listener only after we know the branchId? 
-        // Or simpler: The calling component ensures it subscribes. 
-        // We will assume the UI calls this. We can use onSnapshot on the User to get branchId then subscribe to Teams?
-        // Let's rely on the fact that 'currentUser' is available. We'll fetch branchId once.
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
 
-        getDoc(doc(db, "users", currentUser.uid)).then(userSnap => {
-            const branchId = userSnap.data()?.branchId;
-            if (branchId) {
-                const q = query(collection(db, "teams"), where("branchId", "==", branchId));
-                onSnapshot(q, (snap) => callback(snap.docs.map(mapDoc)));
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
+            const userData = userDoc.data() as User;
+            if (userData.branchId) {
+                const q = query(collection(db, "teams"), where("branchId", "==", userData.branchId));
+                unsubscribe = onSnapshot(q, (snap) => {
+                    if (isCancelled) return;
+                    callback(snap.docs.map(mapDoc));
+                });
             } else {
                 callback([]);
             }
-        });
+        })();
 
-        return () => { }; // Cleanup is tricky here with the promise. 
-        // Ideally, we should receive branchId as argument to subscribeToTeams
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
     },
 
     // BETTER SIGNATURE:
@@ -423,7 +473,7 @@ export const api = {
         const userData = userDoc.data() as User;
 
         if (userData.role === UserRole.ADMIN) {
-            const querySnapshot = await getDocs(collection(db, "users"));
+            const querySnapshot = await getDocs(query(collection(db, "users"), where("branchId", "==", userData.branchId)));
             return querySnapshot.docs.map(mapDoc);
         } else {
             if (!userData.teamId) return [];
@@ -457,20 +507,19 @@ export const api = {
         const userData = userDoc.data() as User;
 
         if (userData.role === UserRole.ADMIN) {
-            const usersSnap = await getDocs(collection(db, "users"));
-            const ticketsSnap = await getDocs(collection(db, "tickets"));
-            const messagesSnap = await getDocs(collection(db, "messages"));
+            const usersSnap = await getDocs(query(collection(db, "users"), where("branchId", "==", userData.branchId)));
+            const ticketsSnap = await getDocs(query(collection(db, "tickets"), where("branchId", "==", userData.branchId)));
+            const messagesSnap = await getDocs(query(collection(db, "messages"), where("branchId", "==", userData.branchId)));
             return {
                 users: usersSnap.size,
                 openTickets: ticketsSnap.docs.filter(d => d.data().status !== TicketStatus.COMPLETE).length,
                 messages: messagesSnap.size
             };
         } else {
-            if (!userData.teamId) return { users: 0, openTickets: 0, messages: 0 };
-
-            const usersQ = query(collection(db, "users"), where("teamId", "==", userData.teamId));
-            const ticketsQ = query(collection(db, "tickets"), where("teamId", "==", userData.teamId));
-            const msgsQ = query(collection(db, "messages"), where("teamId", "==", userData.teamId));
+            const bid = userData.branchId;
+            const usersQ = query(collection(db, "users"), where("branchId", "==", bid), where("teamId", "==", userData.teamId));
+            const ticketsQ = query(collection(db, "tickets"), where("branchId", "==", bid), where("teamId", "==", userData.teamId));
+            const msgsQ = query(collection(db, "messages"), where("branchId", "==", bid), where("teamId", "==", userData.teamId));
 
             const [users, tickets, msgs] = await Promise.all([getDocs(usersQ), getDocs(ticketsQ), getDocs(msgsQ)]);
 
@@ -491,11 +540,13 @@ export const api = {
 
         let q;
         if (userData.role === UserRole.ADMIN) {
-            q = query(collection(db, "messages"));
+            q = query(collection(db, "messages"), where("branchId", "==", userData.branchId));
         } else {
             if (!userData.teamId) return [];
-            // Remove orderBy to avoid composite index requirement
-            q = query(collection(db, "messages"), where("teamId", "==", userData.teamId));
+            q = query(collection(db, "messages"), 
+                where("branchId", "==", userData.branchId),
+                where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+            );
         }
 
         const querySnapshot = await getDocs(q);
@@ -505,7 +556,49 @@ export const api = {
         return msgs;
     },
 
-    sendMessage: async (text: string) => {
+    subscribeToMessages: (callback: (messages: any[]) => void) => {
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
+
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
+
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
+            const userData = userDoc.data() as User;
+            let q;
+
+            if (userData.role === UserRole.ADMIN) {
+                q = query(collection(db, "messages"), where("branchId", "==", userData.branchId));
+            } else {
+                if (!userData.teamId) {
+                    callback([]);
+                    return;
+                }
+                q = query(collection(db, "messages"),
+                    where("branchId", "==", userData.branchId),
+                    where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+                );
+            }
+
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                if (isCancelled) return;
+                const msgs = snapshot.docs.map(mapDoc);
+                msgs.sort((a: any, b: any) => a.timestamp - b.timestamp);
+                callback(msgs);
+            }, (error) => {
+                console.warn("Message subscription warning:", error);
+            });
+        })();
+
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
+    },
+
+    sendMessage: async (text: string, recipientId?: string, options?: { replyToId?: string, forwardedFrom?: string, attachment?: any }) => {
         const currentUser = auth.currentUser;
         if (!currentUser) throw new Error("Not authenticated");
 
@@ -514,18 +607,58 @@ export const api = {
 
         if (!userData.teamId && userData.role !== UserRole.ADMIN) throw new Error("No Team Assigned");
 
-        const newMessage = {
+        const newMessage: any = {
             text,
             senderId: currentUser.uid,
             senderName: userData?.name || 'Unknown',
             timestamp: Date.now(),
-            chatId: 'general',
-            teamId: userData.teamId || 'admin_global',
-            isBot: false
+            teamId: userData.teamId || `admin_global_${userData.branchId}`,
+            branchId: userData.branchId,
+            isBot: false,
+            ...options
         };
+
+        if (recipientId) {
+            // Direct Message
+            newMessage.chatType = 'dm';
+            newMessage.recipientId = recipientId;
+            newMessage.chatId = [currentUser.uid, recipientId].sort().join('_');
+        } else {
+            // Group Message
+            newMessage.chatType = 'group';
+            newMessage.chatId = 'general';
+        }
 
         const docRef = await addDoc(collection(db, "messages"), newMessage);
         return { id: docRef.id, ...newMessage };
+    },
+
+    editMessage: async (messageId: string, newText: string) => {
+        const docRef = doc(db, "messages", messageId);
+        await updateDoc(docRef, { text: newText, isEdited: true });
+    },
+
+    deleteMessageForEveryone: async (messageId: string) => {
+        const docRef = doc(db, "messages", messageId);
+        await updateDoc(docRef, { isDeleted: true, text: "This message was deleted." });
+    },
+
+    deleteMessageForMe: async (messageId: string) => {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        const docRef = doc(db, "messages", messageId);
+        // We use arrayUnion to add the user's ID to the deletedFor array
+        await updateDoc(docRef, {
+            deletedFor: arrayUnion(currentUser.uid)
+        });
+    },
+
+    togglePinMessage: async (messageId: string, isPinned: boolean, expiresAt?: number) => {
+        const docRef = doc(db, "messages", messageId);
+        const updateData: any = { isPinned };
+        if (expiresAt) updateData.pinExpiresAt = expiresAt;
+        if (!isPinned) updateData.pinExpiresAt = null;
+        await updateDoc(docRef, updateData);
     },
 
     // TICKETS
@@ -536,14 +669,55 @@ export const api = {
         const userData = userDoc.data() as User;
 
         if (userData.role === UserRole.ADMIN) {
-            const snap = await getDocs(collection(db, "tickets"));
+            const snap = await getDocs(query(collection(db, "tickets"), where("branchId", "==", userData.branchId)));
             return snap.docs.map(mapDoc);
         } else {
             if (!userData.teamId) return [];
-            const q = query(collection(db, "tickets"), where("teamId", "==", userData.teamId));
+            const q = query(collection(db, "tickets"), 
+                where("branchId", "==", userData.branchId),
+                where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+            );
             const snap = await getDocs(q);
             return snap.docs.map(mapDoc);
         }
+    },
+
+    subscribeToTickets: (callback: (tickets: any[]) => void) => {
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
+
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
+
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
+            const userData = userDoc.data() as User;
+            let q;
+
+            if (userData.role === UserRole.ADMIN) {
+                q = query(collection(db, "tickets"), where("branchId", "==", userData.branchId));
+            } else {
+                if (!userData.teamId) {
+                    callback([]);
+                    return;
+                }
+                q = query(collection(db, "tickets"),
+                    where("branchId", "==", userData.branchId),
+                    where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+                );
+            }
+
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                if (isCancelled) return;
+                callback(snapshot.docs.map(mapDoc));
+            });
+        })();
+
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
     },
 
     createTicket: async (data: { title: string, description: string, priority: string }) => {
@@ -559,7 +733,8 @@ export const api = {
             ...data,
             status: TicketStatus.STARTED,
             assignedTo: currentUser.uid,
-            teamId: userData.teamId || 'admin_global',
+            teamId: userData.teamId || `admin_global_${userData.branchId}`,
+            branchId: userData.branchId,
             createdAt: Date.now()
         };
 
@@ -579,41 +754,46 @@ export const api = {
 
     // POLLS
     subscribeToPolls: (callback: (polls: any[]) => void) => {
-        const currentUser = auth.currentUser;
-        if (!currentUser) return () => { };
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
 
-        let unsubscribe = () => { };
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
 
-        getDoc(doc(db, "users", currentUser.uid)).then(userDoc => {
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
             const userData = userDoc.data() as User;
             let q;
 
-            // If user has no team (and not Admin), return empty list immediately
             if (userData.role !== UserRole.ADMIN && !userData.teamId) {
                 callback([]);
                 return;
             }
 
             if (userData.role === UserRole.ADMIN) {
-                // Admin can query all. If index exists, this is fine. If not, client side sort is safer.
-                // For safety, removing orderBy here too if complex, but single field orderBy is usually auto-indexed.
-                q = query(collection(db, "polls"));
+                q = query(collection(db, "polls"), where("branchId", "==", userData.branchId));
             } else {
-                // Remove orderBy to avoid composite index requirement failure
-                q = query(collection(db, "polls"), where("teamId", "==", userData.teamId));
+                q = query(collection(db, "polls"),
+                    where("branchId", "==", userData.branchId),
+                    where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+                );
             }
 
             unsubscribe = onSnapshot(q, (snapshot: any) => {
+                if (isCancelled) return;
                 const polls = snapshot.docs.map(mapDoc);
-                // Client-side sort
                 polls.sort((a: any, b: any) => b.createdAt - a.createdAt);
                 callback(polls);
             }, (error: any) => {
                 console.error("Error subscribing to polls:", error);
             });
-        });
+        })();
 
-        return () => unsubscribe();
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
     },
 
     createPoll: async (pollData: any) => {
@@ -630,7 +810,8 @@ export const api = {
             ...pollData,
             createdBy: currentUser.uid,
             createdAt: Date.now(),
-            teamId: userData.teamId || 'admin_global',
+            teamId: userData.teamId || `admin_global_${userData.branchId}`,
+            branchId: userData.branchId,
             votes: []
         };
         delete newPoll.id;
@@ -662,14 +843,55 @@ export const api = {
         const userData = userDoc.data() as User;
 
         if (userData.role === UserRole.ADMIN) {
-            const snap = await getDocs(collection(db, "reminders"));
+            const snap = await getDocs(query(collection(db, "reminders"), where("branchId", "==", userData.branchId)));
             return snap.docs.map(mapDoc);
         } else {
             if (!userData.teamId) return [];
-            const q = query(collection(db, "reminders"), where("teamId", "==", userData.teamId));
+            const q = query(collection(db, "reminders"), 
+                where("branchId", "==", userData.branchId),
+                where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+            );
             const snap = await getDocs(q);
             return snap.docs.map(mapDoc);
         }
+    },
+
+    subscribeToReminders: (callback: (reminders: any[]) => void) => {
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
+
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
+
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
+            const userData = userDoc.data() as User;
+            let q;
+
+            if (userData.role === UserRole.ADMIN) {
+                q = query(collection(db, "reminders"), where("branchId", "==", userData.branchId));
+            } else {
+                if (!userData.teamId) {
+                    callback([]);
+                    return;
+                }
+                q = query(collection(db, "reminders"),
+                    where("branchId", "==", userData.branchId),
+                    where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+                );
+            }
+
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                if (isCancelled) return;
+                callback(snapshot.docs.map(mapDoc));
+            });
+        })();
+
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
     },
 
     createReminder: async (data: { title: string, dueDate: string }) => {
@@ -682,7 +904,8 @@ export const api = {
             ...data,
             completed: false,
             userId: currentUser.uid,
-            teamId: userData.teamId || 'admin_global',
+            teamId: userData.teamId || `admin_global_${userData.branchId}`,
+            branchId: userData.branchId,
             createdAt: Date.now()
         };
         const docRef = await addDoc(collection(db, "reminders"), newReminder);
@@ -707,14 +930,56 @@ export const api = {
         const userData = userDoc.data() as User;
 
         if (userData.role === UserRole.ADMIN) {
-            const snap = await getDocs(collection(db, "schedule"));
+            const snap = await getDocs(query(collection(db, "schedule"), where("branchId", "==", userData.branchId)));
             return snap.docs.map(mapDoc);
         } else {
             if (!userData.teamId) return [];
-            const q = query(collection(db, "schedule"), where("teamId", "==", userData.teamId));
+            const q = query(collection(db, "schedule"), 
+                where("branchId", "==", userData.branchId),
+                where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+            );
             const snap = await getDocs(q);
             return snap.docs.map(mapDoc);
         }
+    },
+
+    subscribeToSchedule: (callback: (events: any[]) => void) => {
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
+
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
+
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
+            const userData = userDoc.data() as User;
+            let q;
+
+            if (userData.role === UserRole.ADMIN) {
+                q = query(collection(db, "schedule"), where("branchId", "==", userData.branchId));
+            } else {
+                if (!userData.teamId) {
+                    callback([]);
+                    return;
+                }
+                q = query(collection(db, "schedule"),
+                    where("branchId", "==", userData.branchId),
+                    where("teamId", "in", [userData.teamId, `admin_global_${userData.branchId}`])
+                );
+            }
+
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                if (isCancelled) return;
+                const events = snapshot.docs.map(mapDoc);
+                callback(events);
+            });
+        })();
+
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
     },
 
     createScheduleEvent: async (data: any) => {
@@ -726,7 +991,8 @@ export const api = {
         const newEvent = {
             ...data,
             createdBy: currentUser.uid,
-            teamId: userData.teamId || 'admin_global',
+            teamId: userData.teamId || `admin_global_${userData.branchId}`,
+            branchId: userData.branchId,
             createdAt: Date.now()
         };
         const docRef = await addDoc(collection(db, "schedule"), newEvent);
@@ -745,13 +1011,16 @@ export const api = {
 
     // STANDUPS: Leader-Led Model
     getActiveStandup: async (teamId: string) => {
-        // Requires index on teamId + createdAt DESC
-        // If index missing, might fail. Fallback to client sorting if needed?
-        // Let's try simple query first. If failing, we might need composite index creation URL from Firebase.
+        const currentUser = auth.currentUser;
+        if (!currentUser) return null;
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        const userData = userDoc.data() as User;
+
         try {
             const q = query(
                 collection(db, "standups"),
-                where("teamId", "==", teamId),
+                where("branchId", "==", userData.branchId),
+                where("teamId", "in", [teamId, `admin_global_${userData.branchId}`]),
                 orderBy("createdAt", "desc"),
                 limit(1)
             );
@@ -759,22 +1028,77 @@ export const api = {
             if (snap.empty) return null;
             return mapDoc(snap.docs[0]);
         } catch (e) {
-            console.warn("Index missing for getActiveStandup, falling back to client sort", e);
-            // Fallback for dev without index
-            const q = query(collection(db, "standups"), where("teamId", "==", teamId));
+            const q = query(collection(db, "standups"), 
+                where("branchId", "==", userData.branchId),
+                where("teamId", "in", [teamId, `admin_global_${userData.branchId}`])
+            );
             const snap = await getDocs(q);
             const docs = snap.docs.map(mapDoc);
-            docs.sort((a: any, b: any) => b.createdAt - a.createdAt);
+            docs.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
             return docs[0] || null;
         }
+    },
+
+    subscribeToActiveStandup: (teamId: string, callback: (standup: any | null) => void) => {
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
+
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
+
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
+            const userData = userDoc.data() as User;
+            const bid = userData.branchId;
+            const adminGlobalId = `admin_global_${bid}`;
+
+            try {
+                const q = query(
+                    collection(db, "standups"),
+                    where("branchId", "==", bid),
+                    where("teamId", "in", [teamId, adminGlobalId]),
+                    orderBy("createdAt", "desc"),
+                    limit(1)
+                );
+                unsubscribe = onSnapshot(q, (snap) => {
+                    if (isCancelled) return;
+                    if (snap.empty) callback(null);
+                    else callback(mapDoc(snap.docs[0]));
+                }, (e) => {
+                    if (isCancelled) return;
+                    console.warn("Index missing for subscribeToActiveStandup, falling back to client sort subscription", e);
+                    const qFallback = query(collection(db, "standups"),
+                        where("branchId", "==", bid),
+                        where("teamId", "in", [teamId, adminGlobalId])
+                    );
+                    unsubscribe = onSnapshot(qFallback, (snap) => {
+                        if (isCancelled) return;
+                        const docs = snap.docs.map(mapDoc);
+                        docs.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+                        callback(docs[0] || null);
+                    });
+                });
+            } catch (e) {
+                console.error("Setup failed for active standup sub", e);
+            }
+        })();
+
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
     },
 
     createStandupSession: async (data: { teamId: string, title: string, selectedDate: string }) => {
         const currentUser = auth.currentUser;
         if (!currentUser) throw new Error("Not authenticated");
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        const userData = userDoc.data() as User;
 
         const newSession = {
             ...data,
+            branchId: userData.branchId,
             createdBy: currentUser.uid,
             createdAt: Date.now()
         };
@@ -784,9 +1108,10 @@ export const api = {
 
     subscribeToStandupResponses: (standupId: string, callback: (responses: any[]) => void) => {
         const q = query(collection(db, "standups", standupId, "responses"), orderBy("submittedAt", "asc"));
-        return onSnapshot(q, (snap) => {
+        const unsubscribe = onSnapshot(q, (snap) => {
             callback(snap.docs.map(mapDoc));
         });
+        return unsubscribe;
     },
 
     submitStandupResponse: async (standupId: string, message: string) => {
@@ -826,6 +1151,96 @@ export const api = {
 
     deleteStandupResponse: async (standupId: string, responseId: string) => {
         await deleteDoc(doc(db, "standups", standupId, "responses", responseId));
+        return { success: true };
+    },
+
+    // PROJECTS
+    subscribeToProjects: (teamId: string, callback: (projects: any[]) => void) => {
+        let unsubscribe: (() => void) | null = null;
+        let isCancelled = false;
+
+        (async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser) return;
+
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (isCancelled) return;
+            const userData = userDoc.data() as User;
+            const bid = userData.branchId;
+
+            try {
+                let q;
+                if (teamId === `admin_global_${bid}`) {
+                    q = query(collection(db, "projects"),
+                        where("branchId", "==", bid),
+                        orderBy("createdAt", "desc")
+                    );
+                } else {
+                    q = query(
+                        collection(db, "projects"),
+                        where("branchId", "==", bid),
+                        where("teamId", "in", [teamId, `admin_global_${bid}`]),
+                        orderBy("createdAt", "desc")
+                    );
+                }
+                unsubscribe = onSnapshot(q, (snap) => {
+                    if (isCancelled) return;
+                    callback(snap.docs.map(mapDoc));
+                }, (e) => {
+                    if (isCancelled) return;
+                    let qFallback;
+                    if (teamId === `admin_global_${bid}`) {
+                        qFallback = query(collection(db, "projects"),
+                            where("branchId", "==", bid)
+                        );
+                    } else {
+                        qFallback = query(
+                            collection(db, "projects"),
+                            where("branchId", "==", bid),
+                            where("teamId", "in", [teamId, `admin_global_${bid}`])
+                        );
+                    }
+                    unsubscribe = onSnapshot(qFallback, (snap) => {
+                        if (isCancelled) return;
+                        const docs = snap.docs.map(mapDoc);
+                        docs.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+                        callback(docs);
+                    });
+                });
+            } catch (e) {
+                console.error("Setup failed for projects sub", e);
+            }
+        })();
+
+        return () => {
+            isCancelled = true;
+            if (unsubscribe) unsubscribe();
+        };
+    },
+
+    createProject: async (data: any) => {
+        const currentUser = auth.currentUser;
+        if (!currentUser) throw new Error("Not authenticated");
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        const userData = userDoc.data() as User;
+
+        const newProject = {
+            ...data,
+            branchId: userData.branchId,
+            createdBy: currentUser.uid,
+            createdAt: Date.now()
+        };
+        const docRef = await addDoc(collection(db, "projects"), newProject);
+        return { id: docRef.id, ...newProject };
+    },
+
+    updateProject: async (projectId: string, data: any) => {
+        await updateDoc(doc(db, "projects", projectId), data);
+        return { success: true };
+    },
+
+    deleteProject: async (projectId: string) => {
+        await deleteDoc(doc(db, "projects", projectId));
         return { success: true };
     }
 };

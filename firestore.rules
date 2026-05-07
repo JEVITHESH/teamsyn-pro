@@ -1,8 +1,80 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isBranchAdmin(branchId) {
+      return getUserData().branchId == branchId && getUserData().role == 'ADMIN';
+    }
+    
+    function isSameBranch(branchId) {
+      return getUserData().branchId == branchId;
+    }
+
+    // USERS
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        getUserData().branchId == resource.data.branchId
+      );
+      allow write: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        isBranchAdmin(resource.data.branchId) ||
+        isBranchAdmin(request.resource.data.branchId)
+      );
+    }
+
+    // TEAMS
+    match /teams/{teamId} {
+      allow read: if isAuthenticated() && isSameBranch(resource.data.branchId);
+      allow write: if isAuthenticated() && (
+        isBranchAdmin(request.resource.data.branchId) || 
+        (resource != null && isBranchAdmin(resource.data.branchId))
+      );
+    }
+
+    // BRANCHES
+    match /branches/{branchId} {
+      allow read: if isAuthenticated() && (
+        isSameBranch(branchId) || 
+        request.auth.uid == resource.data.adminId
+      );
+      allow write: if isAuthenticated() && request.auth.uid == resource.data.adminId;
+    }
+
+    // TICKETS
+    match /tickets/{ticketId} {
+      allow read: if isAuthenticated() && isSameBranch(resource.data.branchId);
+      allow create: if isAuthenticated() && isSameBranch(request.resource.data.branchId);
+      allow update, delete: if isAuthenticated() && (
+        isBranchAdmin(resource.data.branchId) || 
+        getUserData().uid == resource.data.createdBy ||
+        getUserData().uid == resource.data.assignedTo
+      );
+    }
+
+    // MESSAGES
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && isSameBranch(resource.data.branchId);
+      allow create: if isAuthenticated() && isSameBranch(request.resource.data.branchId);
+      allow update, delete: if isAuthenticated() && (
+        isBranchAdmin(resource.data.branchId) || 
+        request.auth.uid == resource.data.senderId
+      );
+    }
+
+    // FALLBACK
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false; // Deny everything else by default
     }
   }
 }

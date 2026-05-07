@@ -1,8 +1,6 @@
-
 import React, { useState } from 'react';
 import { User } from '../types.ts';
 import {
-    Globe,
     Moon,
     Sun,
     Monitor,
@@ -10,7 +8,18 @@ import {
     ToggleLeft,
     ToggleRight,
     ChevronRight,
-    LogOut
+    LogOut,
+    Shield,
+    Info,
+    Layout,
+    Globe,
+    Bell,
+    Lock,
+    Cpu,
+    Zap,
+    ChevronLeft,
+    Check,
+    ShieldCheck
 } from 'lucide-react';
 
 interface SettingsProps {
@@ -21,198 +30,204 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ user, isDarkMode, toggleTheme, onLogout }) => {
-    const [activeTab, setActiveTab] = useState('general');
-    const [language, setLanguage] = useState(() => localStorage.getItem('teamsync_language') || 'English (US)');
-    const [timezone, setTimezone] = useState(() => localStorage.getItem('teamsync_timezone') || 'Auto (UTC-05:00)');
+    const [activeTab, setActiveTab] = useState('appearance');
     const [highContrast, setHighContrast] = useState(() => localStorage.getItem('teamsync_highcontrast') === 'true');
-
-    const updateLanguage = (val: string) => {
-        setLanguage(val);
-        localStorage.setItem('teamsync_language', val);
-    };
-
-    const updateTimezone = (val: string) => {
-        setTimezone(val);
-        localStorage.setItem('teamsync_timezone', val);
-    };
 
     const updateHighContrast = () => {
         const newVal = !highContrast;
         setHighContrast(newVal);
         localStorage.setItem('teamsync_highcontrast', String(newVal));
-        // Apply high contrast class if needed in global styles (optional future enhancement)
     };
 
     const tabs = [
-        { id: 'general', label: 'General', icon: Globe },
-        { id: 'appearance', label: 'Appearance', icon: Monitor },
-        { id: 'about', label: 'About', icon: HelpCircle },
+        { id: 'appearance', label: 'Appearance', icon: Monitor, desc: 'Customize the visual experience' },
+        { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Manage your alert preferences' },
+        { id: 'security', label: 'Privacy & Security', icon: Lock, desc: 'Configure access and data control' },
+        { id: 'about', label: 'Platform Info', icon: Info, desc: 'System version and licenses' },
     ];
 
     return (
-        <div className="max-w-5xl mx-auto pb-20 no-scrollbar">
-            <div className="flex flex-col md:flex-row gap-8">
+        <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
+            
+            {/* SaaS Settings Header */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-border/50">
+                <div>
+                    <h1 className="text-3xl font-bold  text-foreground">Workspace Settings</h1>
+                    <p className="text-muted-foreground text-sm mt-1">Configure your personal preferences and workspace environment.</p>
+                </div>
+            </div>
 
-                {/* Sidebar Navigation */}
-                <div className="w-full md:w-64 flex-shrink-0">
-                    <div className="bg-white dark:bg-zinc-900 rounded-[2rem] p-4 border border-zinc-200 dark:border-zinc-800 shadow-sm sticky top-6">
-                        <h2 className="px-4 py-3 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Settings</h2>
-                        <div className="space-y-1">
-                            {tabs.map((tab) => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`
-                    w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all
-                    ${activeTab === tab.id
-                                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold'
-                                            : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}
-                  `}
-                                >
-                                    <tab.icon className="w-4 h-4" />
-                                    <span className="text-xs font-medium">{tab.label}</span>
-                                    {activeTab === tab.id && <ChevronRight className="w-4 h-4 ml-auto text-zinc-400" />}
-                                </button>
-                            ))}
-                        </div>
+            <div className="flex flex-col lg:flex-row gap-8 items-start">
 
-                        <div className="mt-8 pt-8 border-t border-zinc-100 dark:border-zinc-800">
-                            <button
-                                onClick={onLogout}
-                                className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-all"
-                            >
-                                <LogOut className="w-4 h-4" />
-                                <span className="text-xs font-bold">Sign Out</span>
-                            </button>
-                        </div>
+                {/* Vertical Navigation Tabs */}
+                <div className="w-full lg:w-72 space-y-1">
+                    {tabs.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`
+                                w-full flex items-center gap-4 p-4 rounded-xl transition-all text-left
+                                ${activeTab === tab.id
+                                    ? 'bg-accent text-white shadow-lg shadow-accent/10 font-bold'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'}
+                            `}
+                        >
+                            <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-white' : 'text-muted-foreground'}`} />
+                            <div className="flex-1 overflow-hidden">
+                                <p className="text-sm truncate">{tab.label}</p>
+                                {activeTab === tab.id && <p className="text-[10px] text-white/60 font-medium truncate mt-0.5">{tab.desc}</p>}
+                            </div>
+                            {activeTab === tab.id && <ChevronRight className="w-4 h-4 text-white/40" />}
+                        </button>
+                    ))}
+
+                    <div className="pt-8 mt-8 border-t border-border/50">
+                        <button
+                            onClick={onLogout}
+                            className="w-full flex items-center gap-4 p-4 rounded-xl text-red-500 font-bold hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20"
+                        >
+                            <LogOut className="w-4 h-4" />
+                            <span className="text-sm">Sign Out of Workspace</span>
+                        </button>
                     </div>
                 </div>
 
-                {/* Content Area */}
-                <div className="flex-1 space-y-6">
-
-                    {/* Header */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                        <div className="flex items-center gap-6">
-                            <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-900 dark:text-white">
-                                {tabs.find(t => t.id === activeTab)?.icon && React.createElement(tabs.find(t => t.id === activeTab)!.icon, { className: "w-8 h-8" })}
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tighter mb-1">
-                                    {tabs.find(t => t.id === activeTab)?.label}
-                                </h1>
-                                <p className="text-zinc-500 text-xs font-medium">Manage your {activeTab} preferences</p>
-                            </div>
+                {/* Settings Content Panels */}
+                <div className="flex-1 saas-card bg-card/60 backdrop-blur-md border-border/50 overflow-hidden min-h-[500px]">
+                    
+                    {/* Panel Header */}
+                    <div className="p-8 border-b border-border/50 bg-muted/10 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-card border border-border shadow-sm flex items-center justify-center text-accent">
+                           {tabs.find(t => t.id === activeTab)?.icon && React.createElement(tabs.find(t => t.id === activeTab)!.icon, { className: "w-6 h-6" })}
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-foreground ">{tabs.find(t => t.id === activeTab)?.label}</h2>
+                            <p className="text-[11px] font-bold text-muted-foreground   mt-1">Parameters Registry • Sync Active</p>
                         </div>
                     </div>
 
-                    {/* Settings Content */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 md:p-10 border border-zinc-200 dark:border-zinc-800 shadow-sm min-h-[500px]">
-
-                        {activeTab === 'general' && (
-                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className="grid gap-6">
-                                    <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
-                                        <div className="flex items-center gap-4">
-                                            <Globe className="w-5 h-5 text-zinc-400" />
+                    <div className="p-8 md:p-10 space-y-10">
+                        
+                        {activeTab === 'appearance' && (
+                            <div className="space-y-12">
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between gap-6 p-6 rounded-2xl bg-muted/10 border border-border/50">
+                                        <div className="flex items-center gap-6">
+                                            <div className="w-12 h-12 bg-card rounded-xl border border-border shadow-sm flex items-center justify-center text-accent">
+                                                {isDarkMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                                            </div>
                                             <div>
-                                                <p className="font-bold text-zinc-900 dark:text-white text-sm">Language</p>
-                                                <p className="text-[10px] text-zinc-500 font-medium">Select your interface language</p>
+                                                <p className="text-base font-bold text-foreground">Theme Preference</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">Toggle between light and dark interface modes.</p>
                                             </div>
                                         </div>
-                                        <select
-                                            value={language}
-                                            onChange={(e) => updateLanguage(e.target.value)}
-                                            className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-bold py-2 pl-4 pr-10 rounded-xl focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white outline-none cursor-pointer dark:text-white"
-                                        >
-                                            <option>English (US)</option>
-                                            <option>English (UK)</option>
-                                            <option>Spanish</option>
-                                            <option>French</option>
-                                            <option>German</option>
-                                            <option>Japanese</option>
-                                        </select>
+                                        <div className="flex bg-muted p-1 rounded-xl border border-border/50 shadow-inner">
+                                            <button onClick={() => !isDarkMode && toggleTheme()} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${!isDarkMode ? 'bg-card text-foreground shadow-sm border border-border/50' : 'text-muted-foreground hover:text-foreground'}`}>Light</button>
+                                            <button onClick={() => isDarkMode && toggleTheme()} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${isDarkMode ? 'bg-card text-foreground shadow-sm border border-border/50' : 'text-muted-foreground hover:text-foreground'}`}>Dark</button>
+                                        </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
-                                        <div className="flex items-center gap-4">
-                                            <HelpCircle className="w-5 h-5 text-zinc-400" />
+                                    <div className="flex items-center justify-between gap-6 p-6 rounded-2xl bg-muted/10 border border-border/50">
+                                        <div className="flex items-center gap-6">
+                                            <div className="w-12 h-12 bg-card rounded-xl border border-border shadow-sm flex items-center justify-center text-accent">
+                                                <Monitor className="w-5 h-5" />
+                                            </div>
                                             <div>
-                                                <p className="font-bold text-zinc-900 dark:text-white text-sm">Timezone</p>
-                                                <p className="text-[10px] text-zinc-500 font-medium">Current local time: {new Date().toLocaleTimeString()}</p>
+                                                <p className="text-base font-bold text-foreground">Visual Consistency</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">Force high contrast for improved legibility across nodes.</p>
                                             </div>
                                         </div>
-                                        <select
-                                            value={timezone}
-                                            onChange={(e) => updateTimezone(e.target.value)}
-                                            className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs font-bold py-2 pl-4 pr-10 rounded-xl focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white outline-none cursor-pointer dark:text-white"
+                                        <button 
+                                            onClick={updateHighContrast} 
+                                            className={`w-12 h-7 rounded-full p-1 transition-all ${highContrast ? 'bg-accent' : 'bg-muted border border-border'}`}
                                         >
-                                            <option>Auto (UTC-05:00)</option>
-                                            <option>UTC-08:00 (Pacific Time)</option>
-                                            <option>UTC+00:00 (London)</option>
-                                            <option>UTC+01:00 (Paris)</option>
-                                            <option>UTC+01:00 (Berlin, Germany)</option>
-                                            <option>UTC+05:30 (New Delhi, India)</option>
-                                            <option>UTC+09:00 (Tokyo)</option>
-                                        </select>
+                                            <div className={`w-5 h-5 bg-white rounded-full transition-all shadow-sm ${highContrast ? 'translate-x-5' : 'translate-x-0'}`} />
+                                        </button>
                                     </div>
+                                </div>
+                                
+                                <div className="p-6 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl flex items-center gap-4">
+                                   <Zap className="w-5 h-5 text-indigo-500 shrink-0" />
+                                   <p className="text-xs text-indigo-500/80 font-medium leading-relaxed">System-wide typography is currently locked to **Inter** to maintain organizational consistency standards.</p>
                                 </div>
                             </div>
                         )}
 
-                        {activeTab === 'appearance' && (
-                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
-                                    <div className="flex items-center gap-4">
-                                        {isDarkMode ? <Moon className="w-5 h-5 text-zinc-400" /> : <Sun className="w-5 h-5 text-zinc-400" />}
-                                        <div>
-                                            <p className="font-bold text-zinc-900 dark:text-white text-sm">Theme Preference</p>
-                                            <p className="text-[10px] text-zinc-500 font-medium">Switch between light and dark mode</p>
+                        {activeTab === 'notifications' && (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 gap-4">
+                                    {[
+                                        { label: "Internal Node Alerts", desc: "Push notifications for important events" },
+                                        { label: "Email Digests", desc: "Weekly summaries of team progress" },
+                                        { label: "Chat Mentions", desc: "Alerts when you are @referenced" }
+                                    ].map((item, i) => (
+                                        <div key={i} className="flex items-center justify-between p-6 rounded-2xl bg-muted/10 border border-border/50 hover:bg-muted/20 transition-all cursor-pointer">
+                                            <div>
+                                                <p className="text-base font-bold text-foreground">{item.label}</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                                            </div>
+                                            <div className="w-12 h-7 rounded-full p-1 bg-accent bg-opacity-10 border border-accent/20">
+                                                <div className="w-5 h-5 bg-accent rounded-full translate-x-5 shadow-sm" />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <button onClick={toggleTheme} className="flex items-center gap-2 px-6 py-3 bg-zinc-900 border border-zinc-900 text-white dark:bg-white dark:border-white dark:text-black rounded-xl shadow-lg hover:opacity-90 transition-all text-xs font-black uppercase tracking-widest">
-                                        {isDarkMode ? 'Current: Dark Mode' : 'Current: Light Mode'}
-                                    </button>
-                                </div>
-
-                                <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
-                                    <div className="flex items-center gap-4">
-                                        <Monitor className="w-5 h-5 text-zinc-400" />
-                                        <div>
-                                            <p className="font-bold text-zinc-900 dark:text-white text-sm">High Contrast</p>
-                                            <p className="text-[10px] text-zinc-500 font-medium">Increase contrast for better visibility</p>
-                                        </div>
-                                    </div>
-                                    <button onClick={updateHighContrast}>
-                                        {highContrast ? <ToggleRight className="w-8 h-8 text-zinc-900 dark:text-white" /> : <ToggleLeft className="w-8 h-8 text-zinc-300 dark:text-zinc-600" />}
-                                    </button>
+                                    ))}
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'about' && (
-                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 text-center py-12">
-                                <div className="w-20 h-20 bg-zinc-900 dark:bg-white rounded-[2rem] mx-auto flex items-center justify-center mb-6 shadow-2xl">
-                                    <span className="text-3xl font-black text-white dark:text-black">TS</span>
+                            <div className="space-y-12">
+                                <div className="text-center space-y-6 py-4">
+                                    <div className="w-20 h-20 bg-accent rounded-3xl mx-auto flex items-center justify-center shadow-2xl shadow-accent/20 border border-white/10 group">
+                                        <Zap className="w-10 h-10 text-white fill-white group-hover:scale-110 transition-transform" />
+                                    </div>
+
+                                    <div>
+                                        <h2 className="text-3xl font-bold  text-foreground">TeamSync Pro</h2>
+                                        <p className="text-[10px] font-bold text-accent  tracking-[0.4em] mt-2">Scaleable Workspace v5.0_LTS</p>
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <h2 className="text-3xl font-black tracking-tighter mb-2">TeamSync Pro</h2>
-                                    <p className="text-zinc-400 font-medium">Version 2.4.0 (Build 8933)</p>
-                                </div>
-
-                                <div className="flex justify-center gap-4 pt-8">
-                                    <button className="text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Privacy Policy</button>
-                                    <span className="text-zinc-300">•</span>
-                                    <button className="text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Terms of Service</button>
-                                    <span className="text-zinc-300">•</span>
-                                    <button className="text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white">Licenses</button>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="p-6 saas-card bg-muted/5">
+                                        <p className="text-[10px] font-bold text-muted-foreground  mb-4  pl-1">Environment Specs</p>
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-muted-foreground font-medium">Core Engine</span>
+                                                <span className="text-foreground font-bold">V-Stream 9.2</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-muted-foreground font-medium">Security</span>
+                                                <span className="text-foreground font-bold">AES-GCM-256</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-muted-foreground font-medium">Latency</span>
+                                                <span className="text-emerald-500 font-bold">Optimal (12ms)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="p-6 saas-card bg-muted/5">
+                                        <p className="text-[10px] font-bold text-muted-foreground  mb-4  pl-1">Resource Center</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button className="p-3 bg-card border border-border rounded-xl text-[10px] font-bold   text-muted-foreground hover:text-accent hover:border-accent/30 transition-all">Documentation</button>
+                                            <button className="p-3 bg-card border border-border rounded-xl text-[10px] font-bold   text-muted-foreground hover:text-accent hover:border-accent/30 transition-all">Support API</button>
+                                            <button className="p-3 bg-card border border-border rounded-xl text-[10px] font-bold   text-muted-foreground hover:text-accent hover:border-accent/30 transition-all">Legal Node</button>
+                                            <button className="p-3 bg-card border border-border rounded-xl text-[10px] font-bold   text-muted-foreground hover:text-accent hover:border-accent/30 transition-all">Whitepaper</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
 
                     </div>
                 </div>
+            </div>
+
+            {/* Platform Compliance Footer */}
+            <div className="max-w-4xl mx-auto flex items-center justify-center gap-10 opacity-10">
+               <ShieldCheck className="w-12 h-12 text-foreground" />
+               <Globe className="w-12 h-12 text-foreground" />
+               <Cpu className="w-12 h-12 text-foreground" />
             </div>
         </div>
     );

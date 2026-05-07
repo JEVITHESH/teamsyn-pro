@@ -32,6 +32,8 @@ export interface User {
   isApproved: boolean;
   avatar: string;
   requestedTeamName?: string; // For Pending Team Leaders
+  linkedinId?: string;
+  githubId?: string;
 }
 
 export interface Ticket {
@@ -43,6 +45,7 @@ export interface Ticket {
   assignedTo: string;
   creator_name?: string; // Added for display
   teamId: string;
+  branchId: string; // LINK TO BRANCH
   createdAt: number;
 }
 
@@ -54,11 +57,21 @@ export interface Message {
   timestamp: number;
   isBot?: boolean;
   chatId: string;
+  chatType?: 'group' | 'dm';
+  recipientId?: string;
   teamId: string;
+  branchId: string; // LINK TO BRANCH
   attachment?: {
     type: 'image' | 'video';
     url: string;
   };
+  deletedFor?: string[]; // Array of user IDs who deleted this message for themselves
+  isDeleted?: boolean; // Deleted for everyone
+  isEdited?: boolean;
+  replyToId?: string; // ID of the message being replied to
+  forwardedFrom?: string; // Name of the original sender
+  isPinned?: boolean; // Is the message pinned
+  pinExpiresAt?: number;
 }
 
 export interface Vote {
@@ -80,6 +93,7 @@ export interface Poll {
   createdBy: string;
   createdAt: number;
   teamId: string;
+  branchId: string; // LINK TO BRANCH
   votes: Vote[];
 }
 
@@ -89,6 +103,8 @@ export interface Reminder {
   completed: boolean;
   dueDate: string;
   userId: string;
+  teamId: string;
+  branchId: string; // LINK TO BRANCH
 }
 
 export interface ScheduleEvent {
@@ -97,6 +113,8 @@ export interface ScheduleEvent {
   date: string;
   description: string;
   location: string;
+  teamId: string;
+  branchId: string; // LINK TO BRANCH
 }
 
 export interface Notification {
@@ -111,6 +129,7 @@ export interface Notification {
 export interface StandupSession {
   id: string;
   teamId: string;
+  branchId: string; // LINK TO BRANCH
   title?: string;
   selectedDate: string;
   createdBy: string;
@@ -127,3 +146,33 @@ export interface StandupResponse {
   message: string;
   submittedAt: number;
 }
+
+export type ProjectStatus = 'Active' | 'Completed' | 'Pending';
+
+export interface ProjectMember {
+  userId: string;
+  name: string;
+  role?: string;
+  avatar?: string;
+}
+
+export interface Project {
+  id: string;
+  teamId: string;
+  branchId: string; // LINK TO BRANCH
+  name: string;
+  description: string;
+  detailedDescription: string;
+  githubLink: string;
+  status: ProjectStatus;
+  priority?: 'Low' | 'Medium' | 'High';
+  progress?: number;
+  startDate: string;
+  deadline: string;
+  teamMembers: ProjectMember[];
+  excelFileData?: string; // base64 data for simplicity, or URL
+  excelFileName?: string;
+  createdBy: string;
+  createdAt: number;
+}
+
